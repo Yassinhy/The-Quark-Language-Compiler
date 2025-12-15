@@ -390,10 +390,7 @@ typedef struct statement
         {
             string name;
             size_t name_length;
-            struct {
-                string name;
-                size_t name_length;
-            }* parameters;
+            expression** parameters; //parameters could be any expression 
             size_t param_count;
             struct statement* code_block;
 
