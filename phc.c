@@ -10,6 +10,7 @@ typedef char* string;
 #define upper 4
 FILE* output = NULL;
 size_t glbl_offset = 0;
+size_t semicolmn_count = 0;
 
 
 // gcc -pg test.c -o test
@@ -89,6 +90,10 @@ typedef enum {
     TOK_BIT_XOR,        // 48 - ^
     TOK_SHIFT_LEFT,     // 49 - <<
     TOK_SHIFT_RIGHT,    // 50 - >>
+
+    // TOKEN OF DATA TYPES
+    TOK_DATATYPE,      // 51 - data type like :int, :bool, :string
+    TOK_VOID,           // 52 - void data type
 } TokenType;
 
 // Precedense values
@@ -120,6 +125,32 @@ typedef enum{
     ERROR_INTERNAL,
     ERROR_UNDEFINED,
 } error_code;
+
+typedef enum {
+    DATA_TYPE_INT,
+    DATA_TYPE_FLOAT,
+    DATA_TYPE_DOUBLE,
+    DATA_TYPE_CHAR,
+    DATA_TYPE_LONG,
+    DATA_TYPE_BOOL,
+    DATA_TYPE_STRING,
+    DATA_TYPE_VOID,
+    DATA_TYPE_UNDEFINED,
+    DATA_TYPE_POINTER,
+} Data_type;
+
+const int Data_type_sizes[] = {
+    [DATA_TYPE_INT] = 4,
+    [DATA_TYPE_FLOAT] = 4,
+    [DATA_TYPE_DOUBLE] = 8,
+    [DATA_TYPE_CHAR] = 1,
+    [DATA_TYPE_LONG] = 8,
+    [DATA_TYPE_BOOL] = 1,
+    [DATA_TYPE_STRING] = 8,
+    [DATA_TYPE_VOID] = 0,
+    [DATA_TYPE_UNDEFINED] = 0,
+    [DATA_TYPE_POINTER] = 8,
+};
 
 const Precedence presedences[] = {
     // Control tokens - stops parsing
@@ -224,6 +255,7 @@ typedef struct token
             size_t length;
         } str_value;
         int int_value;
+        Data_type data_type;
     };
 }token;
 
@@ -393,7 +425,7 @@ typedef struct statement
             expression** parameters; //parameters could be any expression 
             size_t param_count;
             struct statement* code_block;
-
+            size_t hash;
 
         } stmnt_function_declaration;
         
@@ -453,6 +485,44 @@ typedef struct {
 } Arena;
 
 
+typedef struct hash_node{
+    string var_name;
+    size_t var_name_length;
+    uint32_t offset;
+    uint32_t size;
+    struct hash_node* next;
+} hash_node;
+
+typedef struct
+{
+    hash_node** hash_map;
+    uint32_t capacity;
+    struct SymbolTable* parent_scope; 
+    uint32_t current_offset;
+} symbol_table;
+
+#define DEFAULT_SCOPE_CAPACITY 64
+symbol_table* peek_stack(void){
+    return compiler->current_variable_hashtable->storage[compiler->current_variable_hashtable->current_size];
+}
+symbol_table* create_symbol_table() {
+    symbol_table* new_table = arena_alloc(compiler->symbol_arena, sizeof(symbol_table));
+    new_table->capacity = DEFAULT_SCOPE_CAPACITY;
+    new_table->parent_scope = peek_stack();
+    new_table->current_offset = 0;
+    new_table->hash_map = create_hash_table(DEFAULT_SCOPE_CAPACITY);
+    return new_table;
+}
+
+// stack made for var hash table
+typedef struct
+{
+    uint32_t capacity;
+    uint32_t current_size;
+    symbol_table** storage;
+}stack;
+
+
 Arena* initialize_arena(size_t capacity);
 void free_arena(Arena* arena);
 
@@ -461,6 +531,10 @@ typedef struct {
     Arena* statements_arena;       // For AST nodes and parser data  
     Arena* expressions_arena;    // For string literals and identifiers
     Arena* symbol_arena;    // For symbol table (if you keep it)
+    Arena* sandbox_arena;
+
+    // Stack
+    stack* current_variable_hashtable;
 
     // Buffer
     char buffer[16 * 1024];
@@ -468,12 +542,24 @@ typedef struct {
     size_t currentsize;
 } Compiler;
 
+stack* initialize_stack(uint32_t size) {
+    stack* stack = malloc(sizeof(stack));
+    stack->capacity = size;
+    stack->current_size = 0;
+    stack->storage = arena_alloc(compiler->symbol_arena, size);
+    stack->storage[stack->current_size++] = NULL;
+
+    return stack;
+}
+
 Compiler* init_compiler_arenas(size_t file_length) {
     Compiler* arenas = malloc(sizeof(Compiler));
     arenas->token_arena = initialize_arena((file_length + 1) * token_size);
     arenas->statements_arena = initialize_arena(file_length * (expression_size + node_size));
     arenas->expressions_arena = initialize_arena(file_length * expression_size);
     arenas->symbol_arena = initialize_arena(default_capacity);
+    arenas->sandbox_arena = initialize_arena(semicolmn_count * 8 + 512); // extra 512 bytes for safety
+    arenas->current_variable_hashtable = initialize_stack(1024 * 1024 * 8);
 
     arenas->capacity = 16 * 1024;
     arenas->currentsize = 0;
@@ -485,22 +571,33 @@ void free_global_arenas(Compiler* arenas) {
     if (arenas->statements_arena) free_arena(arenas->statements_arena);
     if (arenas->expressions_arena) free_arena(arenas->expressions_arena);
     if(arenas->symbol_arena) free_arena(arenas->symbol_arena);
+    if(arenas->sandbox_arena) free_arena(arenas->sandbox_arena);
+    if (arenas->current_variable_hashtable) free(arenas->current_variable_hashtable);
+    
     free(arenas);
 }
 
 
-typedef struct hash_node{
-    string var_name;
-    size_t var_name_length;
-    uint32_t offset;
-    uint32_t size;
-    struct hash_node* next;
-} hash_node;
+
+
+typedef struct function_symbol_node {
+    statement* function_declaration;
+    uint32_t total_offset; // sub rsp, total_offset
+    uint32_t total_var_count;
+    uint32_t hash;
+
+    hash_node** local_symbol_table;
+    struct function_symbol_node* next;
+
+} function_symbol_node;
 
 hash_node** create_hash_table(size_t size);
+function_symbol_node** create_function_hash_table(size_t size);
 
-size_t amount_of_variables = 0;
-hash_node** symbol_table = NULL;
+
+
+size_t amount_of_global_variables = 0;
+function_symbol_node** function_symbol_table = NULL;
 
 // GLOBAL AST, parser and tokens** POINTER FOR PANIC FUNCTIONALITY
 AST* glbl_ast = NULL;
@@ -547,8 +644,6 @@ int evaluate_bin(expression* binary_exp);
 void evaluate_expression(expression* expr);
 
 // Free functions
-static inline void free_tokens(token** tokens);
-static inline void free_node(node* node);
 static inline void free_ast(AST* ast);
 static inline void free_parser(Parser* parser);
 
@@ -586,9 +681,10 @@ int main(int argc, char *argv[]){
         panic(ERROR_INTERNAL, "ERROR: No tokens created! Check your tokenizer.");
     }
 
-    size_t table_size = (amount_of_variables > 0) ? amount_of_variables * 2 : 32; 
-    symbol_table = create_hash_table(table_size);
-    amount_of_variables = table_size;
+    //initialize symbol tables
+    function_symbol_table = create_function_hash_table(32);
+    size_t table_size = (amount_of_global_variables > 0) ? amount_of_global_variables * 2 : 32;
+    amount_of_global_variables = table_size;
 
     //create parser
     Parser* parser = make_parser(compiler);
@@ -635,6 +731,41 @@ int main(int argc, char *argv[]){
     printf("Code executed in %.6f seconds\n", time_spent);
     
     return 0;
+}
+
+//////////////////////////////////////////////////////    STACK FUNCTIONS    //////////////////////////////////////////////////////////////////////////
+
+void push(stack* stack, hash_node** hash_table) {
+    if(!stack) panic(ERROR_UNDEFINED, "scope not declared");
+    if (stack->current_size > stack->capacity) panic(ERROR_MEMORY_ALLOCATION, "Too many nested scopes/ recursion, divide function into more functions,  files or optimise");
+    
+    stack->storage[stack->current_size] = hash_table;
+    stack->current_size++;
+}
+
+void pop(stack* stack) {
+    if(!stack) panic(ERROR_UNDEFINED, "scope not declared");
+    if (stack->current_size <= 1) panic(ERROR_INTERNAL, "Cannot pop the global (base) scope.");
+
+    stack->current_size--;
+}
+
+hash_node* get_current_scope(uint32_t hash, uint32_t name_len, string name) {
+    if (!compiler || !compiler->current_variable_hashtable) panic(ERROR_UNDEFINED, "Scope Stack not initialized.");
+
+    for (size_t i = compiler->current_variable_hashtable->current_size - 1; i > 0; i--)
+    {   
+        hash_node* node = compiler->current_variable_hashtable->storage[i]->hash_map[hash];
+        while(node != NULL) {
+            if (node->var_name_length == name_len && !strcmp(node->var_name, name)) {
+                return node;
+            }
+
+            node = node->next;
+        }
+    }
+    panic(ERROR_UNDEFINED_VARIABLE, "undefined variable");
+    return NULL;
 }
 
 
@@ -687,6 +818,7 @@ static void panic(error_code error_code, string message)
             fprintf(stderr, "Unknown error");
             break;
     }
+    
     if(glbl_parser){
         fprintf(stderr, " at line %lu: \n", glbl_parser->current_line);
     }
@@ -770,7 +902,57 @@ void free_arena(Arena* arena) {
 
 //////////////////////////////////////////////////   SYMBOL TABLE         ////////////////////////////////////////////////////////////////////
 
+function_symbol_node** create_function_hash_table(size_t size)
+{
+    function_symbol_node** table = arena_alloc(compiler->symbol_arena, sizeof(function_symbol_node*) * size);
+    if(!table) panic(ERROR_MEMORY_ALLOCATION, "Function symbol table allocation failed");
+    memset(table, 0, sizeof(function_symbol_node*) * size);
+    return table;
+}
 
+function_symbol_node* make_function_node(statement* function_declaration, uint32_t total_offset, uint32_t total_var_count, hash_node** local_symbol_table)
+{
+    function_symbol_node* new_node = arena_alloc(compiler->symbol_arena, sizeof(function_symbol_node));
+    if(!new_node) panic(ERROR_MEMORY_ALLOCATION, "Function node allocation failed");
+    new_node->function_declaration = function_declaration;
+    new_node->total_offset = total_offset;
+    new_node->total_var_count = total_var_count;
+    new_node->local_symbol_table = local_symbol_table;
+    new_node->hash = hash_function(function_declaration->stmnt_function_declaration.name, function_declaration->stmnt_function_declaration.name_length);
+    new_node->next = NULL;
+    return new_node;
+}
+
+function_symbol_node* append_function_node(function_symbol_node** table, statement* function_declaration, uint32_t total_offset, uint32_t total_var_count, hash_node** local_symbol_table, size_t index)
+{
+    function_symbol_node* current = table[index];
+    if(!current)
+    {
+        table[index] = make_function_node(function_declaration, total_offset, total_var_count, local_symbol_table);
+        return table[index];
+    }
+    while(current->next)
+    {
+        current = current->next;
+    }
+    current->next = make_function_node(function_declaration, total_offset, total_var_count, local_symbol_table);
+    return current->next;
+}
+
+hash_node** create_func_scope(size_t size)
+{
+    hash_node** table = arena_alloc(compiler->symbol_arena, sizeof(hash_node*) * size);
+    if(!table) return NULL;
+    memset(table, 0, sizeof(hash_node*) * size);
+    return table;
+}
+
+hash_node* append_var_to_function_node (function_symbol_node** table, function_symbol_node* function_node, string var_name, size_t var_name_length, uint32_t offset, uint32_t size)
+{
+    if(!table[function_node->hash]) panic(ERROR_INTERNAL, "Undeclared Function");
+//   if(!function_node->local_symbol_table) function_node->local_symbol_table = create_hash_table(function_node->total_var_count * 2);
+    return append_node(function_node->local_symbol_table, var_name, var_name_length, offset, size);
+}
 
 
 hash_node** create_hash_table(size_t size)
@@ -783,7 +965,7 @@ hash_node** create_hash_table(size_t size)
 
 static inline size_t hash_function(const string var_name, size_t var_name_length)
 {
-    return ((var_name[0] + 'a') * var_name_length) % (amount_of_variables);
+    return ((var_name[0] + 'a') * var_name_length) % (amount_of_global_variables);
 }
 
 hash_node* make_node(string var_name, size_t var_name_length, uint32_t offset, uint32_t size)
@@ -852,7 +1034,7 @@ static const uint8_t CHAR_TYPE[256] = {
     ['A'] = 1, ['B'] = 1, ['C'] = 1, ['D'] = 1, ['E'] = 1, ['F'] = 1, ['G'] = 1, ['H'] = 1, ['I'] = 1, ['J'] = 1, ['K'] = 1, ['L'] = 1, ['M'] = 1, ['N'] = 1, ['O'] = 1, ['P'] = 1, ['Q'] = 1, ['R'] = 1, ['S'] = 1, ['T'] = 1, ['U'] = 1, ['V'] = 1, ['W'] = 1, ['X'] = 1, ['Y'] = 1, ['Z'] = 1,
     ['='] = 2, ['+'] = 4, ['-'] = 5, ['*'] = 6, ['/'] = 7, 
     [' '] = 3, ['\n'] = 3, ['\t'] = 3, ['\r'] = 3,
-    ['('] = 8, [')'] = 9, [';'] = 10
+    ['('] = 8, [')'] = 9, [';'] = 10, [':'] = 12,
 
 };
 
@@ -960,7 +1142,7 @@ static void tokenize(const string source, Compiler* compiler){
             tokens[token_count].line = line_number;
             tokens[token_count].str_value.starting_value = &source[token_start];
             tokens[token_count].str_value.length = i - token_start;
-            amount_of_variables += identify_token(tokens[token_count].str_value.starting_value, tokens[token_count].str_value.length, &tokens[token_count]);
+            amount_of_global_variables += identify_token(tokens[token_count].str_value.starting_value, tokens[token_count].str_value.length, &tokens[token_count]);
             
             token_count++;
             break;
@@ -972,6 +1154,41 @@ static void tokenize(const string source, Compiler* compiler){
             tokens[token_count].type = TOK_SEMICOLON; // SEMICOLUMN            
             token_count++;
             i++;
+            semicolmn_count++;
+            break;
+        }
+
+        case 12:{
+        
+            tokens[token_count].line = line_number;
+            tokens[token_count].type = TOK_COLON; // COLON            
+            token_count++;
+            i++;
+            switch (source[i])
+            {
+            case 'i':
+                if (source[1] == 'n' && source[2] == 't') tokens[token_count].type = DATA_TYPE_INT;
+                i += 3;
+                break;
+            case 'b':
+                if (source[1] == 'o' && source[2] == 'o' && source[3] == 'l') tokens[token_count].type = DATA_TYPE_BOOL;
+                i += 4;
+                break;
+            case 'c':
+                if (source[1] == 'h' && source[2] == 'a' && source[3] == 'r') tokens[token_count].type = DATA_TYPE_CHAR;
+                i += 4;
+                break;
+            case 'l':
+                if (source[1] == 'o' && source[2] == 'n' && source[3] == 'g') tokens[token_count].type = DATA_TYPE_LONG;
+                i += 4;
+                break;
+            case 'd':
+                if (source[1] == 'o' && source[2] == 'u' && source[3] == 'b' && source[4] == 'l' && source[5] == 'e') tokens[token_count].type = DATA_TYPE_DOUBLE;
+                i += 6;
+                break;
+            default:
+                panic(ERROR_SYNTAX, ("unidentified data type at line %lu", line_number));
+            }
             break;
         }
 
@@ -1092,7 +1309,7 @@ node* create_variable_node(string var_name, size_t length)
     var_node->expr->variable.name = var_name;
     var_node->expr->variable.index = hash_function(var_name, length);
     var_node->expr->type = EXPR_IDENTIFIER;
-    append_node(symbol_table, var_name, length, 0, 8); // offset will be set later during code generation and size will be int for now (8 bytes)
+    append_node(peek_stack()->hash_map, var_name, length, 0, 8); // offset will be set later during code generation and size will be int for now (8 bytes)
     return var_node;
 }
 
@@ -1188,6 +1405,7 @@ void evaluate_expression(expression* expr)
         write_to_buffer("mov rax, [rbp - ", 16, output);
         printf("Variable index: %lu\n", expr->variable.index);
         size_t var_index = expr->variable.index;
+        hash_node** symbol_table = peek_stack()->hash_map;
         uint32_t tmp_offset = symbol_table[var_index]->offset;
         while (symbol_table[var_index])
         {
@@ -1384,7 +1602,7 @@ static inline node* parse_let_node(Parser* parser){
     let_node->stmnt->stmnt_let.name_length = peek(parser, 0)->str_value.length;
 
     glbl_offset += 8; //here 8 is the size of int
-    hash_node* variable_hash_node = append_node(symbol_table, peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length, glbl_offset, 8);
+    hash_node* variable_hash_node = append_node(peek_stack()->hash_map, peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length, glbl_offset, 8);
     let_node->stmnt->stmnt_let.hash = hash_function(peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length);
     advance(parser); //consume identifier
 
@@ -1414,6 +1632,50 @@ static inline node* parse_assignment_node(Parser* parser){
     return assignment_node;
 }
 
+node* parse_codeblock_node(Parser* parser) {
+    if (advance(parser) != TOK_LBRACE)
+    {
+        panic(ERROR_SYNTAX, "expected '{' at the beginning of code block");
+    }
+    
+    node* codeblock_node = arena_alloc(compiler->statements_arena, sizeof(node));
+    if(!codeblock_node) panic(ERROR_MEMORY_ALLOCATION, "Codeblock node allocation failed");
+
+    codeblock_node->stmnt = arena_alloc(compiler->statements_arena, sizeof(statement));
+    if(!codeblock_node->stmnt) panic(ERROR_MEMORY_ALLOCATION, "Codeblock node allocation failed");
+
+    codeblock_node->type = NODE_STATEMENT;
+    codeblock_node->stmnt->type = STMT_BLOCK;
+
+    uint64_t capacity = 8;
+    uint64_t count = 0;
+    statement** statements = arena_alloc(compiler->sandbox_arena, sizeof(statement*) * capacity);
+    if(!statements) panic(ERROR_MEMORY_ALLOCATION, "Codeblock statements allocation failed");
+
+    while (peek(parser, 0) != TOK_RBRACE)
+    {
+        // Parse statements
+        if (capacity == count)
+        {
+            capacity *= 2;
+            compiler->statements_arena->current_size -= count * sizeof(statement*);
+            statement** new_statements = arena_alloc(compiler->sandbox_arena, sizeof(statement*) * capacity);
+            if(!new_statements) panic(ERROR_MEMORY_ALLOCATION, "Codeblock statements re-allocation failed");
+            statements = new_statements;
+        }
+        statements[count++] = parse_statement(parser)->stmnt;
+    }
+    if (capacity > count) {
+        // Only trim if we have extra capacity
+        compiler->statements_arena->current_size -= (capacity - count) * sizeof(statement*);
+        // No need to reallocate - just adjust the arena pointer
+    }
+    codeblock_node->stmnt->stmnt_block.statements = statements;
+    codeblock_node->stmnt->stmnt_block.statement_count = count;
+    advance(parser); //consume '}'
+    return codeblock_node;
+}
+
 static inline node* parse_function_node(Parser* parser)
 {
     node* func_node = arena_alloc(compiler->statements_arena, sizeof(node));
@@ -1425,10 +1687,88 @@ static inline node* parse_function_node(Parser* parser)
 
     
     func_node->stmnt->type = STMT_FUNCTION;
-    func_node->stmnt->stmnt_function_declaration.
+
+
+    token* func_token = advance(parser); //consume parameter name
+
+    func_node->stmnt->stmnt_function_declaration.name = func_token->str_value.starting_value;
+    func_node->stmnt->stmnt_function_declaration.name_length = func_token->str_value.length;
+    func_node->stmnt->stmnt_function_declaration.hash = hash_function(func_token->str_value.starting_value, func_token->str_value.length);
+    
+
+    //create_hash_table() will be used later for local variables
+    function_symbol_node* symbol_node = append_function_node(function_symbol_table, func_node->stmnt, func_node->stmnt, 0, NULL, func_node->stmnt->stmnt_function_declaration.hash);
+
+    if (advance(parser) != TOK_LPAREN) panic(ERROR_SYNTAX, "Expected '(' after function name"); //consume function name
+    uint32_t param_count = 0;
+
+    if (peek(parser, 0) == TOK_VOID)
+    {
+        advance(parser); //consume void
+        if (peek(parser, 0) != TOK_RPAREN)
+        {
+            panic(ERROR_SYNTAX, "Expected ')' after 'void' ");
+        }
+        // no parameters
+    }
+    else {
+        uint32_t i = 0;
+        while (peek(parser, i) != TOK_RPAREN) {
+                if (peek(parser, i)->type != TOK_IDENTIFIER) {
+                    panic(ERROR_SYNTAX, "Expected parameter name");
+                }
+                i++; //consume parameter name
+                if (peek(parser, i)->type != TOK_DATATYPE) {
+                    panic(ERROR_SYNTAX, "Expected parameter type");
+                }
+                i++; //consume parameter type
+                if (peek(parser, i)->type != TOK_COMMA && peek(parser, i)->type != TOK_RPAREN) {
+                    panic(ERROR_SYNTAX, "Expected parameter separator ',' or ')'");
+                }
+                i++; //consume parameter name
+                param_count++;
+        }
+    }
+
+    func_node->stmnt->stmnt_function_declaration.param_count = param_count;
+    symbol_node->local_symbol_table = create_hash_table(param_count * 2); // * 2 for less collisions
+    uint32_t current_rsp_offset = 0;
+    func_node->stmnt->stmnt_function_declaration.parameters = arena_alloc(compiler->expressions_arena, sizeof(expression*) * param_count);
+    if(!func_node->stmnt->stmnt_function_declaration.parameters) panic(ERROR_MEMORY_ALLOCATION, "Function parameters allocation failed");
+    // Parse parameters
+    advance(parser); //consume '('
+    param_count = 0;
+    // fn example(a:type, b:type)
+    while (peek(parser, 0) != TOK_RPAREN)
+    {
+        token* name = advance(parser); //consume parameter name
+        token* type = advance(parser); //consume parameter type
+        expression* param_expr = arena_alloc(compiler->expressions_arena, sizeof(expression)); // expression of type identifier
+
+
+        param_expr->type = EXPR_IDENTIFIER;
+        param_expr->variable.name = name->str_value.starting_value;
+        param_expr->variable.length = name->str_value.length;
+        param_expr->variable.index = hash_function(name->str_value.starting_value, name->str_value.length);
+
+
+        append_var_to_function_node(function_symbol_table, symbol_node, name->str_value.starting_value, type->str_value.length, NULL, Data_type_sizes[type->type]);
+        func_node->stmnt->stmnt_function_declaration.parameters[param_count] = param_expr;
+        if(!param_expr) panic(ERROR_MEMORY_ALLOCATION, "Function parameter allocation failed");
+        param_expr->type = EXPR_IDENTIFIER;
+
+        if (peek(parser, 0)->type == TOK_COMMA) advance(parser); //consume comma
+        param_count++;
+    }
+    advance(parser); // Consume the final ')'
+
+    // now parse the code body
+    func_node->stmnt->stmnt_function_declaration.code_block = parse_codeblock_node(parser)->stmnt;
+    return func_node;
 }
 
 
+///////////////////////////////////////////////////       CODE GENERATION         ///////////////////////////////////////////////////////////////////////////
 char num_buffer[32];
 
 void write_to_buffer(string code, size_t code_length, FILE* output){
@@ -1505,8 +1845,8 @@ void generate_assembly(const AST* AST){
                 {
                     evaluate_expression(AST->nodes[i]->stmnt->stmnt_let.value);
                     write_to_buffer("\nmov [rbp - ", 12, output); //here 8 is the size of int, will become dynamic later
-                    printf("%u", symbol_table[AST->nodes[i]->stmnt->stmnt_let.hash]->offset);
-                    nums_to_str(symbol_table[AST->nodes[i]->stmnt->stmnt_let.hash]->offset, &num_len, output);
+                    printf("%u", get_current_scope(AST->nodes[i]->stmnt->stmnt_let.hash, AST->nodes[i]->stmnt->stmnt_let.name_length, AST->nodes[i]->stmnt->stmnt_let.name)->offset);
+                    nums_to_str(get_current_scope(AST->nodes[i]->stmnt->stmnt_let.hash, AST->nodes[i]->stmnt->stmnt_let.name_length, AST->nodes[i]->stmnt->stmnt_let.name)->offset, &num_len, output);
                     write_to_buffer("], rax\n", 7, output);
                     break;
                 }
@@ -1515,7 +1855,7 @@ void generate_assembly(const AST* AST){
                     evaluate_expression(AST->nodes[i]->stmnt->stmnt_assign.value); // now the expression is in rax
                     write_to_buffer("\nmov [rbp - ", 12, output);
                     
-                    nums_to_str(symbol_table[AST->nodes[i]->stmnt->stmnt_assign.hash]->offset, &num_len, output);
+                    nums_to_str(get_current_scope(AST->nodes[i]->stmnt->stmnt_let.hash, AST->nodes[i]->stmnt->stmnt_let.name_length, AST->nodes[i]->stmnt->stmnt_let.name)->offset, &num_len, output);
                     write_to_buffer("], rax\n", 7, output);
                     break;
                 }
