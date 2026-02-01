@@ -1,0 +1,16 @@
+# Compiled outputs
+output
+*.o
+*.asm
+
+# Editor backups
+*.save
+*.bak
+
+# Hidden editor/project files
+.vscode/
+.idea/
+.zonidentifier
+
+# The TODO app by mostafahagras
+todo.md
