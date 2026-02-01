@@ -5,12 +5,19 @@
 #include "frontend/tokenization/tokenize.h"
 #include "frontend/parsing/parsing.h"
 #include "backend/assembly_generator/x86_64/x86_64.h"
-#include <stdio.h>
 
 
-int main(int argc, char** argv) { 
+int main(int argc, char** argv) {
     // test
     clock_t start = clock();
+    printf("DEBUG ENUM VALUES:\n");
+    printf("DATA_TYPE_INT = %d\n", DATA_TYPE_INT);
+    printf("DATA_TYPE_FLOAT = %d\n", DATA_TYPE_FLOAT);
+    printf("DATA_TYPE_DOUBLE = %d\n", DATA_TYPE_DOUBLE);
+    printf("DATA_TYPE_CHAR = %d\n", DATA_TYPE_CHAR);
+    printf("DATA_TYPE_LONG = %d\n", DATA_TYPE_LONG);
+    printf("DATA_TYPE_BOOL = %d\n", DATA_TYPE_BOOL);
+    printf("DATA_TYPE_VOID = %d\n", DATA_TYPE_VOID);
     // parameter checker for ./phc <filename>
     if (argc != 3) {
         printf("Usage: %s <file.ph> <architecture>\n", argv[0]);
@@ -23,12 +30,10 @@ int main(int argc, char** argv) {
 
     //initialize compiler arenas
     Compiler* compiler = init_compiler_arenas(*file_length);
-    warning("testing warning", compiler);
+
     // tokenize
     size_t* token_count = malloc(sizeof(size_t));
-    size_t* function_count = malloc(sizeof(size_t));
-
-    tokenize(source, compiler, token_count, file_length, function_count);
+    tokenize(source, compiler, token_count, file_length);
     if (*token_count == 0) {
         panic(ERROR_INTERNAL, "ERROR: No tokens created! Check your tokenizer.", compiler);
     }
@@ -40,42 +45,24 @@ int main(int argc, char** argv) {
     parser->token_count = *token_count;
 
     // Abstract Syntax Tree
-    printf("43 main start\n");
     AST* ast = arena_alloc(compiler->statements_arena, sizeof(AST), compiler);
-
     compiler->ast = ast;
     ast->nodes = arena_alloc(compiler->statements_arena, sizeof(node*) * *token_count, compiler);  // Allocate pointer array
-    
-    printf("line 50 start\n");
-    printf("sizeof(node*) * (*function_count + 20): %lu\n", sizeof(node*) * (*function_count + 20));
-    ast->function_nodes = arena_alloc(compiler->statements_arena, (sizeof(node*) * (*function_count + 20)), compiler);  // Allocate pointer array
-    printf("line 50 end\n");
     ast->node_count = 0;
-    ast->function_node_count = 0;
     ast->parser = parser;
 
-    // First pass
-    printf("first pass\n");
-    while (parser->current < (*token_count - 1)) {
-        if (peek(parser, 0)->type == TOK_FN) {
-            ast->function_nodes[ast->function_node_count++] = parse_function_node(compiler, parser);
-            printf("done with this\n");
-        }
-        else {
-            advance(parser);
-        }
-    }
-    printf("reseting parser\n");
-    // reset parser
-    compiler->parser->current = 0;
-    printf("now at after reset: %i\n", peek(parser, 0)->type);
+    // first pass of the compiler to get function prototypes:
+
+    // 
+
     // parse code
     while (parser->current < *token_count - 1) {
         node* parsed_node = parse_statement(compiler, parser);
-        if (parsed_node != NULL) {
+        if (parsed_node) {
             ast->nodes[ast->node_count++] = parsed_node;
+        } else {
+            break;
         }
-
         if (peek(parser, 0)->type == TOK_SEMICOLON)
         {
             advance(parser);

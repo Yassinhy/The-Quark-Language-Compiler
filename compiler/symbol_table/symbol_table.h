@@ -9,15 +9,10 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
 symbol_table* peek_symbol_stack(Compiler* compiler);
 symbol_node* find_variable(Compiler* compiler, uint32_t hash, char* var_name, uint32_t var_name_length);
 
-void enter_new_scope(Compiler* compiler);
+void enter_new_scope(Compiler* compiler, Data_type scope_data_type);
 void exit_current_scope(Compiler* compiler);
 
-
-void append_function_to_func_map(function_node* function_node_input, Compiler* compiler);
-function_node* find_function_symbol_node (char* function_name, size_t function_name_length, Compiler* compiler);
-
-size_t peek_endifs(Compiler* compiler);
-void pop_endifs(Compiler* compiler);
-void push_endifs(Compiler* compiler);
+void append_function_to_func_map(function_node* function_node_input, size_t hash, Compiler* compiler);
+function_node* find_function_symbol_node (char* function_name, size_t function_name_length, size_t hash, Compiler* compiler);
 
 #endif

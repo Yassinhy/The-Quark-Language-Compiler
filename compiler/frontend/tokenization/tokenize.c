@@ -2,6 +2,9 @@
 #include "utilities/utils.h"
 #include "arena/arena.h"
 #include "error_handler/error_handler.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
 
 const uint8_t CHAR_TYPE[256] = {
     ['0'] = 11, ['1'] = 11, ['2'] = 11, ['3'] = 11, ['4'] = 11, 
@@ -20,11 +23,31 @@ const uint8_t CHAR_TYPE[256] = {
     ['='] = 2, ['+'] = 4, ['-'] = 5, ['*'] = 6, ['/'] = 7, 
     [' '] = 3, ['\n'] = 3, ['\t'] = 3, ['\r'] = 3,
     ['('] = 8, [')'] = 9, [';'] = 10, [':'] = 12, [','] = 13, 
-    ['{'] = 14, ['}'] = 15, ['#'] = 16
+    ['{'] = 14, ['}'] = 15, ['#'] = 16,
+    ['<'] = 17, ['>'] = 18, ['!'] = 19, ['%'] = 20,
 };
 
-static inline int identify_token(const char* value, size_t length, token* the_token){
+static inline int identify_token(const char* value, size_t length, token* the_token, size_t* function_count){
     switch (length){
+
+        case 6:
+            if (value[0] == 'r' && value[1] == 'e' && value[2] == 't' && value[3] == 'u' && value[4] == 'r' && value[5] == 'n') {
+                the_token->type = TOK_RETURN;
+                return 0;
+            }
+            break;
+
+        case 5:
+            if (value[0] == 'w' && value[1] == 'h' && value[2] == 'i' && value[3] == 'l' && value[4] == 'e') {
+                the_token->type = TOK_WHILE;
+                return 0;
+            }
+            if (value[0] == 'b' && value[1] == 'r' && value[2] == 'e' && value[3] == 'a' && value[4] == 'k') {
+                the_token->type = TOK_BREAK;
+                return 0;
+            }
+            break;
+
         case 4:
             if (value[0] == 'e' && value[1] == 'x' && value[2] == 'i' && value[3] == 't') {
                 the_token->type = TOK_EXIT;
@@ -51,6 +74,7 @@ static inline int identify_token(const char* value, size_t length, token* the_to
             
         case 2:
             if (value[0] == 'f' && value[1] == 'n') {
+                *function_count += 1;
                 the_token->type = TOK_FN;
                 return 0;
             }
@@ -66,15 +90,13 @@ static inline int identify_token(const char* value, size_t length, token* the_to
     return 0;
 }
 
-void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_t* file_length){
-    printf("?\n");
+void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_t* file_length, size_t* function_count){
     token* tokens = arena_alloc(compiler->token_arena, sizeof(token) * (*file_length + 1), compiler);
 
-
+    *function_count = 0;
     *token_count = 0;
     size_t i = 0;
     size_t line_number = 1;
-    printf("check\n");
     while (i < *file_length) {
         if (source[i] == '\0') break;
 
@@ -86,8 +108,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
         
         // Process token at position i
         size_t token_start = i;
-        printf("char: %c\n", source[i]);
-        printf("%i\n", CHAR_TYPE[(unsigned char)source[i]]);
         switch (CHAR_TYPE[(unsigned char)source[i]])
         {
         case 11:{
@@ -147,7 +167,13 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
             break;
         }
         case 7: {
-        
+            if (i + 1 < *file_length && source[i + 1] == '/') {
+                i += 2;  // Skip both backslashes
+                while (i < *file_length && source[i] != '\n') {
+                    i++;
+                }
+                break;
+            }
             tokens[*token_count].line = line_number;
             tokens[*token_count].type = TOK_DIV;
             (*token_count)++;
@@ -175,13 +201,13 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
 
         case 1 :{
             // Identifiers can START only with letters or underscore
-            while (i < *file_length && CHAR_TYPE[(unsigned char)source[i]] == 1) {
+            while (i < *file_length && (CHAR_TYPE[(unsigned char)source[i]] == 1 || (source[i] >= '0' && source[i] <= '9'))) {
                 i++;
             }
             tokens[*token_count].line = line_number;
             tokens[*token_count].str_value.starting_value = (char*)&source[token_start];
             tokens[*token_count].str_value.length = i - token_start;
-            identify_token(tokens[*token_count].str_value.starting_value, tokens[*token_count].str_value.length, &tokens[*token_count]);
+            identify_token(tokens[*token_count].str_value.starting_value, tokens[*token_count].str_value.length, &tokens[*token_count], function_count);
 
             (*token_count)++;
             break;
@@ -219,69 +245,144 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
             break;
         }
 
-        case 16: {
-            if (i + 1 < *file_length && source[i + 1] == '#') {
-                // Comment detected - skip to end of line
-                printf("Found backslash at pos %zu, next char is '%c' (ASCII %d)\n", 
-                i, source[i+1], source[i+1]);
-                i += 2;  // Skip both backslashes
-                while (i < *file_length && source[i] != '\n') {
-                    i++;
-                }
-            } else {
-                panic(ERROR_SYNTAX, "backslash must be followed by another backslash for comments (\\\\)", compiler);
+        case 17: {
+            if (source[i + 1] == '=') { // <=
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_LE;           
+                (*token_count)++;
+                i+=2; 
+                break;
+            }
+            else {   // <
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_LT;           
+                (*token_count)++;
+                i++; 
+                break;
+            }
+        }
+
+        case 18: {
+            if (source[i + 1] == '=') { // >=
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_GE;           
+                (*token_count)++;
+                i+=2; 
+                break;
+            }
+            else {   // >
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_GT;           
+                (*token_count)++;
+                i++; 
+                break;
+            }
+        }
+
+        case 19: {
+            if (source[i + 1] == '=') { // !=
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_NE;           
+                (*token_count)++;
+                i+=2; 
+                break;
+            }
+            else {   // ! only
+                char buffer[100];
+                snprintf(buffer, sizeof(buffer), "unidentified token at line %lu '!', did you mean '!='", line_number);
+                panic(ERROR_UNDEFINED, buffer , compiler);
             }
             break;
         }
 
+        case 20: {
+            tokens[*token_count].line = line_number;
+            tokens[*token_count].type = TOK_PERCENT;           // %
+            (*token_count)++;
+            i++;
+            break;
+        }
+
         case 12:{
-        
             tokens[*token_count].line = line_number;         
             i++;
             while (source[i] == ' ' || source[i] == '\t' || source[i] == '\r')
             {
                 i++;
             }
-            
+            bool found_datatype = false;
             switch (source[i])
             {
                 case 'i':
-                    if (source[i + 1] == 'n' && source[i + 2] == 't') {
-                        tokens[*token_count].type = TOK_DATATYPE;
-                        tokens[*token_count].data_type = DATA_TYPE_INT;
-                        i += 3;
-                    }
-                    break;
-                case 'b':
-                    if (source[ i + 1] == 'o' && source[ i + 2] == 'o' && source[ i + 3] == 'l') {
-                        tokens[*token_count].type = TOK_DATATYPE;
-                        tokens[*token_count].data_type = DATA_TYPE_BOOL;
-                        i += 4;
-                    }
-                    break;
-                case 'c':
-                    if (source[ i + 1] == 'h' && source[ i + 2] == 'a' && source[ i + 3] == 'r') {
-                        tokens[*token_count].type = TOK_DATATYPE;
-                        tokens[*token_count].data_type = DATA_TYPE_CHAR;
-                        i += 4;
-                    }
-                    break;
-                case 'l':
-                    if (source[ i + 1] == 'o' && source[ i + 2] == 'n' && source[ i + 3] == 'g') {
-                        tokens[*token_count].type = TOK_DATATYPE;
-                        tokens[*token_count].data_type = DATA_TYPE_LONG;
-                        i += 4;
-                    }
-                    break;
-                case 'd':
-                    if (source[ i + 1] == 'o' && source[ i + 2] == 'u' && source[ i + 3] == 'b' && source[ i + 4] == 'l' && source[ i + 5] == 'e') {
-                        tokens[*token_count].type = TOK_DATATYPE;
-                        tokens[*token_count].data_type = DATA_TYPE_DOUBLE;
-                        i += 6;
-                    }
+                if (i + 2 < *file_length && source[i + 1] == 'n' && source[i + 2] == 't') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_INT;
+                    printf("DEBUG: Tokenized 'int' as DATA_TYPE_INT (%d)\n", DATA_TYPE_INT);
+                    i += 3;
+                    found_datatype = true;
+                }
                 break;
+            case 'f':
+                if (i + 4 < *file_length && source[i + 1] == 'l' && source[i + 2] == 'o' && source[i + 3] == 'a' && source[i + 4] == 't') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_FLOAT;
+                    printf("DEBUG: Tokenized 'float' as DATA_TYPE_FLOAT (%d)\n", DATA_TYPE_FLOAT);
+                    i += 5;
+                    found_datatype = true;
+                }
+                break;
+            case 'b':
+                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'o' && source[i + 3] == 'l') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_BOOL;
+                    printf("DEBUG: Tokenized 'bool' as DATA_TYPE_BOOL (%d)\n", DATA_TYPE_BOOL);
+                    i += 4;
+                    found_datatype = true;
+                }
+                break;
+            case 'c':
+                if (i + 3 < *file_length && source[i + 1] == 'h' && source[i + 2] == 'a' && source[i + 3] == 'r') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_CHAR;
+                    printf("DEBUG: Tokenized 'char' as DATA_TYPE_CHAR (%d)\n", DATA_TYPE_CHAR);
+                    i += 4;
+                    found_datatype = true;
+                }
+                break;
+            case 'l':
+                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'n' && source[i + 3] == 'g') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_LONG;
+                    printf("DEBUG: Tokenized 'long' as DATA_TYPE_LONG (%d)\n", DATA_TYPE_LONG);
+                    i += 4;
+                    found_datatype = true;
+                }
+                break;
+            case 'd':
+                if (i + 5 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'u' && source[i + 3] == 'b' && source[i + 4] == 'l' && source[i + 5] == 'e') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_DOUBLE;
+                    printf("DEBUG: Tokenized 'double' as DATA_TYPE_DOUBLE (%d)\n", DATA_TYPE_DOUBLE);
+                    i += 6;
+                    found_datatype = true;
+                }
+                break;
+            case 'v':
+                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'i' && source[i + 3] == 'd') {
+                    tokens[*token_count].type = TOK_DATATYPE;
+                    tokens[*token_count].data_type = DATA_TYPE_VOID;
+                    printf("DEBUG: Tokenized 'void' as DATA_TYPE_VOID (%d)\n", DATA_TYPE_VOID);
+                    i += 4;
+                    found_datatype = true;
+                }
+                break;
+            
             default:
-                panic(ERROR_SYNTAX, "unidentified data type at line", compiler);
+                printf("ERROR: Unrecognized data type starting with '%c' at line %zu\n", source[i], line_number);
+                panic(ERROR_SYNTAX, "unidentified data type", compiler);
+        }
+            if (!found_datatype) {
+                panic(ERROR_SYNTAX, "expected data type after ':'", compiler);
             }
             (*token_count)++;
             break;

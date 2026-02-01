@@ -3,71 +3,104 @@
 // #include "frontend/expression_creation/expressions.h"
 #include "utilities/utils.h"
 #include "error_handler/error_handler.h"
-#include <stdbool.h>
+#include <stdio.h>
 
-void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* output, bool conditional)
+const char* regs32[] = {"eax", "ebx", "ecx", "edx", "esi", "edi", "r8d", "r9d"};
+const char* regs64[] = {"rax", "rbx", "rdi", "rsi","rdx", "rcx", "r8 ", "r9 "};
+
+const char* get_reg( int reg_index, Data_type type) {
+    if (type == DATA_TYPE_INT) {
+        return regs32[reg_index];
+    } else {
+        return regs64[reg_index];
+    }
+}
+
+void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* output, int conditional, Data_type wanted_output_result)
 {
     size_t num_len;
+    char buffer[128];
+
     printf("Evaluating expression of type %d\n", expr->type);
 
     switch (expr->type)
     {
     
     case EXPR_INT:{
-    
-        write_to_buffer("mov rax, ", 9, output, compiler);
 
-        // if (expr->integer.value < 0)
-        // {
-        //     write_to_buffer("-", 1, output, compiler);
-        //     write_to_buffer(_u64_to_str(-(expr->integer.value), &num_len), num_len, output, compiler);
-        // }
-        // else
-        // {
-             char* temp = _u64_to_str(expr->integer.value, &num_len);
-             write_to_buffer(temp, num_len, output, compiler);
-             write_to_buffer("\n", 1, output, compiler);
-        // }
+        int len = snprintf(buffer, sizeof(buffer), "mov %s, ", get_reg(0, wanted_output_result));
+        write_to_buffer(buffer, len, output, compiler);
+
+        char* temp2 = _u64_to_str(expr->integer.value, &num_len);
+        write_to_buffer(temp2, num_len, output, compiler);
+        write_to_buffer("\n", 1, output, compiler);
         return;
     }
 
     case EXPR_IDENTIFIER: 
     {
         size_t temp = 0;
-
         symbol_node* var_node = expr->variable.node_in_table;
-        printf("_______________________________%i\n", var_node->where_it_is_stored);
+
         if (var_node->where_it_is_stored == STORE_IN_STACK)
         {
-            write_to_buffer("mov rax, [rbp - ", 16, output, compiler);
+            if (wanted_output_result == DATA_TYPE_LONG && var_node->data_type == DATA_TYPE_INT) {
+                int len = snprintf(buffer, sizeof(buffer), "movsx rax, dword[rbp - ");
+                write_to_buffer(buffer, len, output, compiler);
+            }
+            else {
+                int len = snprintf(buffer, sizeof(buffer), "mov %s, [rbp - ", get_reg(0, wanted_output_result));
+                write_to_buffer(buffer, len, output, compiler);
+            }
+
             nums_to_str(var_node->offset, &temp, output, compiler);
             write_to_buffer("]\n", 2, output, compiler);
         }
         else if (var_node->where_it_is_stored == STORE_AS_PARAM)
         {
-            write_to_buffer("mov rax, [rbp + ", 16, output, compiler);
+
+            if (wanted_output_result == DATA_TYPE_LONG && var_node->data_type == DATA_TYPE_INT) {
+                int len = snprintf(buffer, sizeof(buffer), "movsxd rax, dword[rbp + ");
+                write_to_buffer(buffer, len, output, compiler);
+            }
+            else {
+                int len = snprintf(buffer, sizeof(buffer), "mov %s, [rbp + ", get_reg(0, wanted_output_result));
+                write_to_buffer(buffer, len, output, compiler);
+            }
+
             nums_to_str(var_node->offset, &temp, output, compiler);
             write_to_buffer("]\n", 2, output, compiler);
         }
         else if (var_node->where_it_is_stored == STORE_IN_REGISTER)
         {
-            write_to_buffer("mov rax, ", 9, output, compiler);
-            const char* reg_name = reg[var_node->register_location];
+
+            if (wanted_output_result == DATA_TYPE_LONG && var_node->data_type == DATA_TYPE_INT) {
+                int len = snprintf(buffer, sizeof(buffer), "movsxd rax, ");
+                write_to_buffer(buffer, len, output, compiler);
+            }
+            else if (wanted_output_result == DATA_TYPE_INT && var_node->data_type == DATA_TYPE_INT) {
+                int len = snprintf(buffer, sizeof(buffer), "mov eax, ");
+                write_to_buffer(buffer, len, output, compiler);
+            }
+            else {
+                int len = snprintf(buffer, sizeof(buffer), "mov rax, ");
+                write_to_buffer(buffer, len, output, compiler);
+            }
+
+            const char* reg_name = get_reg(2 + var_node->register_location, wanted_output_result);
             write_to_buffer(reg_name, strlen(reg_name), output, compiler);
             write_to_buffer("\n", 1, output, compiler);
         }
 
-        printf("Variable name: %.*s\n", (int)expr->variable.length, expr->variable.name);
-        printf("Variable offset string: %llu\n", temp);
-        printf("done");
         return;
     }
+
     case EXPR_BINARY:
-        evaluate_bin(expr, compiler, output, conditional);
+        evaluate_bin(expr, compiler, output, conditional, wanted_output_result);
         break;
 
     case EXPR_UNARY:
-        evaluate_unary(expr, compiler, output);
+        evaluate_unary(expr, compiler, output, wanted_output_result);
         break;
     
     case EXPR_FUNCTION_CALL:
@@ -78,10 +111,12 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         if (expr->func_call.parameter_count <= 6) {
             for (size_t i = 0; i < param_count; i++)
             {
-                evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false);
-                write_to_buffer("mov ", 4, output, compiler);
-                write_to_buffer(reg[i], 3, output, compiler);
-                write_to_buffer(", rax\n", 6, output, compiler);
+                Data_type argument_data_type = expr->func_call.arguments[i].result_type;
+
+                evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false, argument_data_type);
+                
+                int len0 = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg(i + 2, argument_data_type), get_reg(0, argument_data_type));
+                write_to_buffer(buffer, len0, output, compiler);
                 
             }
             
@@ -90,16 +125,22 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
             size_t i = 0;
             while (i <= 6)
             {
-                evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false);
-                write_to_buffer("mov ", 4, output, compiler);
-                write_to_buffer(reg[i], 3, output, compiler);
-                write_to_buffer(", rax\n", 6, output, compiler);
+                Data_type argument_data_type = expr->func_call.arguments[i].result_type;
+
+                evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false, argument_data_type);
+
+                int len0 = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg(i + 2, argument_data_type), get_reg(0, argument_data_type));
+                write_to_buffer(buffer, len0, output, compiler);
+
                 i++;
             }
             for (size_t j = param_count - 1; j > 6; j--)
             {
-                evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false);
-                write_to_buffer("push rax\n", 9, output, compiler);
+                Data_type argument_data_type = expr->func_call.arguments[j].result_type;
+
+                evaluate_expression_x86_64(&(expr->func_call.arguments[j]), compiler, output, false, argument_data_type);
+                int len0 = snprintf(buffer, sizeof(buffer), "push rax\n");
+                write_to_buffer(buffer, len0, output, compiler);
             }
             
             
@@ -115,37 +156,172 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
 }
 
 
-int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, bool conditional)
+int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int conditional, Data_type wanted_output_result)
 {
-    evaluate_expression_x86_64(binary_exp->binary.left, compiler, output, false); //left value at rsp
-    write_to_buffer("\npush rax\n", 10, output, compiler);
-    evaluate_expression_x86_64(binary_exp->binary.right, compiler, output, false); // right value at rax
+    char buffer[128];
+    printf("\n\n\nbinary_exp->binary.right: %i\n\n\n", binary_exp->binary.right->variable.data_type);
+    evaluate_expression_x86_64(binary_exp->binary.right, compiler, output, false, wanted_output_result); //right value
+
+    int len0 = snprintf(buffer, sizeof(buffer), "push rax\n");
+    write_to_buffer(buffer, len0, output, compiler);
+
+    evaluate_expression_x86_64(binary_exp->binary.left, compiler, output, false, wanted_output_result); // left value
+
     switch (binary_exp->binary.op)
     {
-    case TOK_ADD:
-        write_to_buffer("\npop rbx\nadd rax, rbx\n", 22, output, compiler);
+    case TOK_ADD: {
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\nadd %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
         break;
-    case TOK_SUB:
-        write_to_buffer("\npop rbx\nxchg rax, rbx\nsub rax, rbx\n", 35, output, compiler);
+    }
+    case TOK_SUB:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\nsub %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
         break;
-    case TOK_MUL:
-        write_to_buffer("\npop rbx\nmul rbx\n", 17, output, compiler);
+    }
+    case TOK_MUL:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\nimul %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
         break;
-    case TOK_DIV:
-        // cmp rbx, 0
-        // je err_div0
-        write_to_buffer("\npop rbx\nxchg rax, rbx\ndiv rax, rbx\n", 35, output, compiler);
-        break;
-    case TOK_EQ:
-        write_to_buffer("\npop rbx\ncmp rax, rbx\n", 22, output, compiler);
-        if (!conditional) // store in rax
-        {
-            write_to_buffer("sete al\nmovzx rax, al\n", 22, output, compiler);
+    }
+    case TOK_DIV:{
+        int len = snprintf(buffer, sizeof(buffer), "pop rbx\n");
+        write_to_buffer(buffer, len, output, compiler);
+
+        // Sign extend RAX into RDX (Required for idiv)
+        if (wanted_output_result == DATA_TYPE_INT) {
+            write_to_buffer("cdq\n", 4, output, compiler); // EAX -> EDX:EAX
+            write_to_buffer("idiv ebx\n", 9, output, compiler);
+        } else {
+            write_to_buffer("cqo\n", 4, output, compiler); // RAX -> RDX:RAX
+            write_to_buffer("idiv rbx\n", 9, output, compiler);
         }
-        else {   // jump if equal
+        break;
+    }
+
+    case TOK_PERCENT:{
+        int len = snprintf(buffer, sizeof(buffer), "pop rbx\n");
+        write_to_buffer(buffer, len, output, compiler);
+
+        // 2. Sign extend RAX into RDX (Required for idiv)
+        if (wanted_output_result == DATA_TYPE_INT) {
+            write_to_buffer("cdq\n", 4, output, compiler);
+            write_to_buffer("idiv ebx\n", 9, output, compiler);
+        } else {
+            write_to_buffer("cqo\n", 4, output, compiler);
+            write_to_buffer("idiv rbx\n", 9, output, compiler);
+        }
+        write_to_buffer("mov rax, rdx\n", 13, output, compiler);
+        break;
+    }
+
+    case TOK_EQ:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n", get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("jne ", 4, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
+            write_to_buffer("je ", 3, output, compiler);
+        }
+        break;
+    }
+        
+    case TOK_NE:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("je ", 3, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
             write_to_buffer("jne ", 4, output, compiler);
         }
         break;
+    }
+
+    case TOK_GT:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("jle ", 4, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
+            write_to_buffer("jg ", 3, output, compiler);
+        }
+        break;
+    }
+//
+    case TOK_LT:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("jge ", 4, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
+            write_to_buffer("jl ", 3, output, compiler);
+        }
+        break;
+    }
+
+    case TOK_GE:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("jl ", 3, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
+            write_to_buffer("jge ", 4, output, compiler);
+        }
+        break;
+    }
+
+    case TOK_LE:{
+        int len0 = snprintf(buffer, sizeof(buffer), "pop rbx\ncmp %s, %s\n",  get_reg(0,  wanted_output_result),  get_reg(1,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
+        if (conditional == 0) // store in rax
+        {
+            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            write_to_buffer(buffer, len0, output, compiler);
+        }
+        else if (conditional == 1) {   // for the if statements
+            write_to_buffer("jg ", 3, output, compiler);
+        }
+        else if (conditional == 2) // for the loops
+        {
+            write_to_buffer("jle ", 4, output, compiler);
+        }
+        break;
+    }
 
     default:
         return 0;
@@ -154,13 +330,15 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, bool 
 }
 
 
-int evaluate_unary(expression* unary_exp, Compiler* compiler, FILE* output)
+int evaluate_unary(expression* unary_exp, Compiler* compiler, FILE* output, Data_type wanted_output_result)
 {
+    char buffer[128];
     switch (unary_exp->unary.op)
     {
     case TOK_SUB:
-        evaluate_expression_x86_64(unary_exp->unary.operand, compiler, output, false);
-        write_to_buffer("neg rax\n", 8, output, compiler);
+        evaluate_expression_x86_64(unary_exp->unary.operand, compiler, output, false, wanted_output_result);
+        int len0 = snprintf(buffer, sizeof(buffer), "neg %s\n", get_reg(0,  wanted_output_result));
+        write_to_buffer(buffer, len0, output, compiler);
         break;
     
     default:

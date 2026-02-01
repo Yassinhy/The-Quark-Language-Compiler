@@ -1,7 +1,7 @@
 # Compiler and Flags
 CC = gcc
 # -I. tells the compiler to look in the current directory for headers
-CFLAGS = -Wall -Wextra -I. 
+CFLAGS = -g -O0 -Wall -Wextra -I.
 
 # List all your source files (.c)
 # We include the paths relative to where this Makefile sits
@@ -27,7 +27,7 @@ all: $(TARGET)
 
 # Link the object files into the final executable
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $(TARGET)
+	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
 
 # Rule to compile .c files into .o files
 %.o: %.c

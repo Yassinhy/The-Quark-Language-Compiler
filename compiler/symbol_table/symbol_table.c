@@ -2,7 +2,7 @@
 #include "arena/arena.h"
 #include "symbol_table/symbol_table.h"
 #include "error_handler/error_handler.h"
-#include <stdlib.h>
+#include <stddef.h>
 
 
 size_t hash_function(const char* var_name, size_t var_name_length)
@@ -12,16 +12,16 @@ size_t hash_function(const char* var_name, size_t var_name_length)
 
 symbol_table* peek_symbol_stack(Compiler* compiler) {
     if (compiler->symbol_table_stack->current_size == 0) {
-        return NULL;
+        panic(ERROR_UNDEFINED, "Trying to reach outside global scope", compiler);
     }
     symbol_table* current_table = compiler->symbol_table_stack->storage[compiler->symbol_table_stack->current_size - 1];
     if (!current_table) {
-        return NULL;
+        panic(ERROR_UNDEFINED, "symbol table does not exist", compiler);
     }
     return current_table;
 }
 
-void enter_new_scope(Compiler* compiler) {
+void enter_new_scope(Compiler* compiler, Data_type scope_data_type) {
     if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
     if (compiler->symbol_table_stack->current_size + 1 >= compiler->symbol_table_stack->capacity) {
         compiler->symbol_table_stack->storage = realloc(compiler->symbol_table_stack->storage, compiler->symbol_table_stack->capacity * 2 * sizeof(symbol_table*));
@@ -32,7 +32,7 @@ void enter_new_scope(Compiler* compiler) {
     if (!new_table) panic(ERROR_MEMORY_ALLOCATION, "New symbol table allocation failed", compiler);
     
     new_table->parent_scope = peek_symbol_stack(compiler);
-    
+    new_table->scope_data_type = scope_data_type;
     new_table->scope_offset = 0;
 
     new_table->symbol_map = arena_alloc(compiler->symbol_arena, 16 * sizeof(symbol_node*), compiler);
@@ -130,9 +130,9 @@ symbol_node* find_variable(Compiler* compiler, uint32_t hash, char* var_name, ui
 
 
 
-void append_function_to_func_map(function_node* function_node_input, Compiler* compiler) {
+void append_function_to_func_map(function_node* function_node_input, size_t hash, Compiler* compiler) {
     
-    function_node** bucket = &(compiler->function_map[hash_function(function_node_input->name, function_node_input->name_length) % BUCKETS_FUNCTION_TABLE]);
+    function_node** bucket = &(compiler->function_map[hash % BUCKETS_FUNCTION_TABLE]);
     while (*bucket != NULL) {
         if ((*bucket)->name_length == function_node_input->name_length && 
             !strncmp((*bucket)->name, function_node_input->name, function_node_input->name_length)) {
@@ -141,13 +141,13 @@ void append_function_to_func_map(function_node* function_node_input, Compiler* c
         bucket = &(*bucket)->next;
     }
     *bucket = function_node_input;
-    function_node_input->next = NULL; 
+    function_node_input->next = NULL;
 }
 
 
-function_node* find_function_symbol_node (char* function_name, size_t function_name_length, Compiler* compiler) {
+function_node* find_function_symbol_node (char* function_name, size_t function_name_length, size_t hash, Compiler* compiler) {
     
-    function_node** bucket = &(compiler->function_map[hash_function(function_name, function_name_length) % BUCKETS_FUNCTION_TABLE]);
+    function_node** bucket = &(compiler->function_map[hash % BUCKETS_FUNCTION_TABLE]);
     while (*bucket != NULL) {
         if ((*bucket)->name_length == function_name_length && 
             !strncmp((*bucket)->name, function_name, function_name_length)) {
@@ -168,30 +168,4 @@ void exit_current_scope(Compiler* compiler) {
     }
 }
 
-
-void push_endifs(Compiler* compiler) {
-    if(compiler->end_ifs->end_ifs_capacity == compiler->end_ifs->end_ifs_count + 1) {
-        compiler->end_ifs->end_ifs_capacity *= 2;
-        size_t* new_ptr = realloc(compiler->end_ifs->end_ifs,compiler->end_ifs->end_ifs_capacity * sizeof(size_t));
-        if(!new_ptr) {
-            panic(ERROR_MEMORY_ALLOCATION, "too many nested if conditions", compiler);
-        }
-        compiler->end_ifs->end_ifs = new_ptr;
-    }
-    compiler->end_ifs->end_ifs[compiler->end_ifs->end_ifs_count] = compiler->if_statements;
-    compiler->end_ifs->end_ifs_count++;
-}
-
-void pop_endifs(Compiler* compiler) {
-    compiler->end_ifs->end_ifs_count--;
-}
-
-size_t peek_endifs(Compiler* compiler) {
-    if (compiler->end_ifs->end_ifs_count == 0)
-    {
-        return 0;
-    }
-    
-    return compiler->end_ifs->end_ifs[compiler->end_ifs->end_ifs_count - 1];
-}
 

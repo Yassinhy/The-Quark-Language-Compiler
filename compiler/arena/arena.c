@@ -1,11 +1,22 @@
 #include "utilities/utils.h"
 #include "error_handler/error_handler.h"
+#include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "arena/arena.h"
 
 
+static size_t alloc_count = 0;
+
 void* arena_alloc(Arena* arena, size_t old_data_size, Compiler* compiler) {
+    printf("data size: %lu, capacity: %lu, current size: %lu\n", old_data_size, arena->capacity, arena->current_size);
     size_t data_size = (old_data_size + 7) & ~7; // Align to 8 bytes
+    alloc_count++;
+
+    if (alloc_count % 1000 == 0) {
+        printf("[ARENA] alloc_count = %zu\n", alloc_count);
+    }
+
     if (arena->current_size + data_size > arena->capacity) {
         panic(ERROR_MEMORY_ALLOCATION, "Not enough memory for more allocation", compiler);
     }
@@ -45,27 +56,30 @@ void free_global_arenas(Compiler* arenas) {
     if (arenas->statements_arena) free_arena(arenas->statements_arena);
     if (arenas->expressions_arena) free_arena(arenas->expressions_arena);
     if(arenas->symbol_arena) free_arena(arenas->symbol_arena);
+    printf("freed");
     if (arenas->symbol_table_stack) {
         if (arenas->symbol_table_stack->storage) {
             free(arenas->symbol_table_stack->storage);
         }
         free(arenas->symbol_table_stack);
     }
-    free(arenas);
-    if (arenas->end_ifs)
-    {
-        free(arenas->end_ifs->end_ifs);
-        free(arenas->end_ifs);
+
+    if(arenas->counters) {
+        free(arenas->counters->end_whiles_stack);
+        free(arenas->counters->end_ifs_stack);
+        free(arenas->counters);
     }
-    
+
+    free(arenas);
 }
 
 Compiler* init_compiler_arenas(size_t file_length) {
     Compiler* arenas = malloc(sizeof(Compiler));
-    arenas->token_arena = initialize_arena((file_length + 1) * sizeof(token));
-    arenas->statements_arena = initialize_arena(file_length * (sizeof(expression) + sizeof(node)));
-    arenas->expressions_arena = initialize_arena(file_length * sizeof(expression));
-    arenas->symbol_arena = initialize_arena(1024 * 1024 * 4);
+    printf("file length: %lu\n", file_length);
+    arenas->token_arena = initialize_arena((file_length + 1) * 10 * sizeof(token));
+    arenas->statements_arena = initialize_arena(file_length * 10 * (sizeof(statement) + sizeof(node)));
+    arenas->expressions_arena = initialize_arena(file_length * 10 * sizeof(expression));
+    arenas->symbol_arena = initialize_arena(1024 * 1024 * 8);
 
     // make the stack struct
     arenas->symbol_table_stack = malloc(sizeof(symbol_table_stack));
@@ -96,13 +110,77 @@ Compiler* init_compiler_arenas(size_t file_length) {
 
     arenas->capacity = 16 * 1024;
     arenas->currentsize = 0;
-    arenas->if_statements = 0;
+
+    // set all counters
+    arenas->counters = malloc(sizeof(counters));
+    arenas->counters->if_statements = 0;
+    arenas->counters->while_statements = 0;
+
+    // set all counter stacks
+    arenas->counters->end_whiles_stack = malloc(32 * sizeof(size_t)); // start with 32 nested scopes
+    arenas->counters->end_whiles_capacity = 32;
+    arenas->counters->end_whiles_current = 0;
+
+    arenas->counters->end_ifs_stack = malloc(32 * sizeof(size_t)); // start with 32 nested scopes
+    arenas->counters->end_ifs_capacity = 32;
+    arenas->counters->end_ifs_current = 0;
     
-    // start with 32 and could grow dynamically
-    arenas->end_ifs = malloc(sizeof(end_ifs));
-    arenas->end_ifs->end_ifs = malloc(32 * sizeof(size_t*));
-    arenas->end_ifs->end_ifs_capacity = 32;
-    arenas->end_ifs->end_ifs_count = 0;
+    
     return arenas;
 }
 
+void push_to_while_stack(size_t counter, Compiler* compiler) {
+    printf("end while counter is: %lu\n", counter);
+    if (compiler->counters->end_whiles_current + 1 > compiler->counters->end_whiles_capacity) {
+        size_t* tmp_stack = realloc(compiler->counters->end_whiles_stack, compiler->counters->end_whiles_capacity * 2 * sizeof(size_t));
+        if (!tmp_stack) panic(ERROR_RUNTIME, "nested too many scopes, not enough memory for more", compiler);
+        else {
+            compiler->counters->end_whiles_stack = tmp_stack;
+            compiler->counters->end_whiles_capacity *= 2;
+        }
+    }
+    compiler->counters->end_whiles_stack[compiler->counters->end_whiles_current] = counter;
+    compiler->counters->end_whiles_current += 1;
+}
+
+void pop_from_while_stack(Compiler* compiler) {
+    if (compiler->counters->end_whiles_current == 0) {
+        panic(ERROR_UNDEFINED, "Trying to pop end_while counter from no scope", compiler);
+    }
+    compiler->counters->end_whiles_current -= 1;
+}
+
+size_t peek_while_stack(Compiler* compiler) {
+    if (compiler->counters->end_whiles_current == 0) {
+        panic(ERROR_UNDEFINED, "Trying to peek end_while counter from no scope pushed", compiler);
+    }
+    return compiler->counters->end_whiles_stack[compiler->counters->end_whiles_current - 1];
+}
+
+void push_to_if_stack(size_t counter, Compiler* compiler) {
+    printf("end if counter is: %lu\n", counter);
+    if (compiler->counters->end_ifs_current + 1 > compiler->counters->end_ifs_capacity) {
+        size_t* tmp_stack = realloc(compiler->counters->end_ifs_stack, compiler->counters->end_ifs_capacity * 2 * sizeof(size_t));
+        if (!tmp_stack) panic(ERROR_RUNTIME, "nested too many scopes, not enough memory for more", compiler);
+        else {
+            compiler->counters->end_ifs_stack = tmp_stack;
+            compiler->counters->end_ifs_capacity *= 2;
+        }
+    }
+    compiler->counters->end_ifs_stack[compiler->counters->end_ifs_current] = counter;
+    compiler->counters->end_ifs_current += 1;
+}
+
+void pop_from_if_stack(Compiler* compiler) {
+    if (compiler->counters->end_ifs_current == 0) {
+        panic(ERROR_UNDEFINED, "Trying to pop end_if counter from no scope", compiler);
+    }
+    compiler->counters->end_ifs_current -= 1;
+}
+
+size_t peek_if_stack(Compiler* compiler) {
+    if (compiler->counters->end_ifs_current == 0) {
+        panic(ERROR_UNDEFINED, "Trying to peek end_if counter from no scope pushed", compiler);
+    }
+    return compiler->counters->end_ifs_stack[compiler->counters->end_ifs_current - 1];
+}

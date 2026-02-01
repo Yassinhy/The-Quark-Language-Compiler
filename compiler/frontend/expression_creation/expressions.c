@@ -4,6 +4,7 @@
 #include "symbol_table/symbol_table.h"
 #include "error_handler/error_handler.h"
 #include "frontend/parsing/parsing.h"
+#include <stdio.h>
 
 node* create_number_node(int value, Compiler* compiler)
 {
@@ -12,6 +13,8 @@ node* create_number_node(int value, Compiler* compiler)
     number_node -> expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
     number_node -> expr -> type = EXPR_INT;
     number_node -> expr -> integer.value = value;
+    // if(value < int max) int
+    // else long
     number_node -> expr -> result_type = DATA_TYPE_INT;
     return number_node;
 }
@@ -106,14 +109,17 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
     else if (left->expr->result_type == DATA_TYPE_INT || right_node->expr->result_type == DATA_TYPE_INT) {
         if (left->expr->result_type == DATA_TYPE_INT && right_node->expr->result_type == DATA_TYPE_INT)
         {
-            bin_node->expr->result_type = DATA_TYPE_LONG;
+            bin_node->expr->result_type = DATA_TYPE_INT;
         }
         else
         {
             panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
         }
     }
-    else panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
+    else {
+        printf("left type: %i, right type: %i\n", left->expr->result_type, right_node->expr->result_type);
+        panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
+    }
 
     bin_node->expr->type = EXPR_BINARY;
     bin_node->expr->binary.left = left->expr;
@@ -139,6 +145,10 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         bin_node->expr->binary.op = TOK_DIV;
         break;
 
+    case TOK_PERCENT:
+        bin_node->expr->binary.op = TOK_PERCENT;
+        break;
+
     case TOK_EQ:
         bin_node->expr->binary.op = TOK_EQ;
         break;
@@ -147,23 +157,51 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         bin_node->expr->binary.op = TOK_NE;
         break;
 
+    case TOK_GT:
+        bin_node->expr->binary.op = TOK_GT;
+        break;
+
+    case TOK_GE:
+        bin_node->expr->binary.op = TOK_GE;
+        break;
+
+    case TOK_LT:
+        bin_node->expr->binary.op = TOK_LT;
+        break;
+        
+    case TOK_LE:
+        bin_node->expr->binary.op = TOK_LE;
+        break;
+
     default:
         fprintf(stderr, "unidentified operator\n");
         panic(ERROR_SYNTAX, "Unknown binary operator", compiler);
     }
-
+    printf("Done with the bin node\n");
     return bin_node;
 }
 
 node* create_func_call_node(char* func_name, size_t name_length, expression* arguments, size_t param_count, Compiler* compiler) 
 {
-    function_node* func_dec_node = find_function_symbol_node(func_name, name_length, compiler);
+
+    function_node* func_dec_node = find_function_symbol_node(func_name, name_length, hash_function(func_name, name_length), compiler);
+    
+    if(!func_dec_node) {
+        panic(ERROR_UNDEFINED, "Function not found", compiler);
+    }
+
+    printf("here1\n");
+
     if(func_dec_node->param_count != param_count) panic(ERROR_ARGUMENT_COUNT, "Wrong number of arguments in function call", compiler);
+    
+    printf("here2\n");
+
     for (size_t i = 0; i < param_count; i++)
     {
         if(arguments[i].result_type != func_dec_node->parameters[i].variable.data_type) panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
     }
     
+    printf("here3\n");
 
     node* func_call_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
     if(!func_call_node) return NULL;
@@ -194,8 +232,26 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     var_node->expr->type = EXPR_IDENTIFIER;
     var_node->expr->variable.hash = hash_function(var_name, length);
     printf("checkpoint2\n");
-    var_node->expr->variable.node_in_table = find_variable(compiler, var_node->expr->variable.hash, var_name, length);
-    printf("checkpoint 4\n");
+    
+    // Look up the variable in the symbol table
+    symbol_node* found_symbol = find_variable(compiler, var_node->expr->variable.hash, var_name, length);
+    
+    if (!found_symbol) {
+        panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
+    }
+
+
+    printf("DEBUG: Found symbol '%.*s' with data_type=%d\n", (int)length, var_name, found_symbol->data_type);
+
+
+    var_node->expr->variable.node_in_table = found_symbol;
+    
+    var_node->expr->variable.data_type = found_symbol->data_type;
+    var_node->expr->result_type = found_symbol->data_type;
+    
+    printf("DEBUG: Variable '%.*s' result_type set to %d\n", (int)length, var_name, var_node->expr->result_type);
+    
+
     return var_node;
 }
 

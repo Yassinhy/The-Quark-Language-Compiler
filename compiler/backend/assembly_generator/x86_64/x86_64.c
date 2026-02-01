@@ -7,6 +7,18 @@
 #include <stdio.h>
 // #include "frontend/expression_creation/expressions.h"
 
+
+const char* regs32_x86[] = {"eax", "ebx", "ecx", "edx", "esi", "edi", "r8d", "r9d"};
+const char* regs64_x86[] = {"rax", "rbx", "rdi", "rsi","rdx", "rcx", "r8 ", "r9 "};
+
+const char* get_reg_x86( int reg_index, Data_type type) {
+    if (type == DATA_TYPE_INT) {
+        return regs32_x86[reg_index];
+    } else {
+        return regs64_x86[reg_index];
+    }
+}
+
 void write_to_buffer(const char* code, size_t code_length, FILE* output, Compiler* compiler){
     if (code_length + compiler->currentsize >= compiler->capacity)
     {
@@ -23,6 +35,8 @@ void write_to_buffer(const char* code, size_t code_length, FILE* output, Compile
 
 
 static char num_buffer[32];
+static char buffer[128];
+
 
 char* _u64_to_str(size_t number, size_t* num_len)
 {
@@ -75,11 +89,8 @@ static void generate_block_code (statement* stmt, size_t* num_len, FILE* output,
 }
 
 static inline void generate_function_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
-    printf("here\n");
     function_node* func_node = stmt->stmnt_function_declaration.function_node;
-    printf("here 2\n");
     write_to_buffer(func_node->name, func_node->name_length, output, compiler);
-    printf("here 3\n");
     write_to_buffer(":\n", 2, output, compiler);
     write_to_buffer("push rbp\nmov rbp, rsp\n", 22, output, compiler);
 
@@ -96,52 +107,64 @@ static inline void generate_function_code(statement* stmt, size_t* num_len, FILE
     // }
     generate_block_code(func_node->code_block, num_len, output, compiler);
 
-    write_to_buffer("ret\n", 4, output, compiler);
     exit_current_scope(compiler);
 }
 
 static void generate_statement_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
-    printf("arrived\n");
     printf("STATEMENT TYPE: %i", stmt->type);
     switch (stmt->type)
     {
     case STMT_EXIT:
         {
-            // printf("exit code type: %d\n", stmt->stmnt_exit.exit_code->type);
-            evaluate_expression_x86_64(stmt->stmnt_exit.exit_code, compiler, output, false);
-            write_to_buffer("\nmov rdi, rax\nmov rax, 60", 25, output, compiler);
-            write_to_buffer("\nsyscall\n", 9, output, compiler);
+            // always int
+            evaluate_expression_x86_64(stmt->stmnt_exit.exit_code, compiler, output, 0, DATA_TYPE_INT);
+            int len = snprintf(buffer, sizeof(buffer), "\nmov rdi, rax\nmov rax, 60\nsyscall\n");
+            write_to_buffer(buffer, len, output, compiler);
             break;
         }
-    
+
+    case STMT_RETURN:
+        evaluate_expression_x86_64(stmt->stmnt_return.value, compiler, output, false, stmt->stmnt_return.return_data_type); // now result is stored in rax
+        write_to_buffer("leave\nret\n", 10, output, compiler);
+        break;
+
     case STMT_LET:
         {
-            printf("broke here\n");
-            evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, false);
-            write_to_buffer("\n", 1, output, compiler);
-            write_to_buffer("mov [rbp - ", 11, output, compiler);
-            nums_to_str(find_variable(compiler, stmt->stmnt_let.hash, stmt->stmnt_let.name, stmt->stmnt_let.name_length)->offset, num_len, output, compiler);
-            write_to_buffer("], rax\n", 7, output, compiler);
+            symbol_node* var = find_variable(compiler, stmt->stmnt_let.hash, stmt->stmnt_let.name, stmt->stmnt_let.name_length);
+            if (!var) {
+                panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
+            }
+
+            evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
+            int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type));
+            write_to_buffer(buffer, len, output, compiler);
             break;
         }
+
     case STMT_ASSIGNMENT:
         {
-            evaluate_expression_x86_64(stmt->stmnt_assign.value, compiler, output, false); // now the expression is in rax
-            symbol_node* var_node = find_variable(compiler, stmt->stmnt_assign.hash, stmt->stmnt_assign.name, stmt->stmnt_assign.name_length);
-            if (!var_node) panic(ERROR_UNDEFINED, "Variable not declared before assignment", compiler);
-            if (var_node->where_it_is_stored == STORE_IN_STACK)
-            {
-                write_to_buffer("\nmov [rbp - ", 12, output, compiler);
-                nums_to_str(find_variable(compiler, stmt->stmnt_assign.hash, stmt->stmnt_assign.name, stmt->stmnt_assign.name_length)->offset, num_len, output, compiler);
-                write_to_buffer("], rax\n", 7, output, compiler);
+            symbol_node* var = find_variable(compiler, stmt->stmnt_assign.hash, stmt->stmnt_assign.name, stmt->stmnt_assign.name_length);
+            if (!var) {
+                panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
             }
-            else if (var_node->where_it_is_stored == STORE_IN_REGISTER)
+
+            evaluate_expression_x86_64(stmt->stmnt_assign.value, compiler, output, 0, var->data_type); // now the expression is in rax
+            
+            if (var->where_it_is_stored == STORE_IN_STACK)
             {
-                write_to_buffer("mov ", 4, output, compiler);
-                write_to_buffer(reg[var_node->register_location], 3, output, compiler);
-                write_to_buffer(", rax\n", 6, output, compiler);
+                printf("stored in the stack\n");
+                int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,var->data_type));
+                write_to_buffer(buffer, len, output, compiler);
             }
-            else if (var_node->where_it_is_stored == STORE_IN_FLOAT_REGISTER)
+            else if (var->where_it_is_stored == STORE_IN_REGISTER)
+            {
+                printf("stored in register %d\n", var->register_location);
+                if (var->data_type == DATA_TYPE_INT) {
+                    int len = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg_x86(2 + var->register_location,  var->data_type), get_reg_x86(0,  var->data_type));
+                    write_to_buffer(buffer, len, output, compiler);
+                }
+            }
+            else if (var->where_it_is_stored == STORE_IN_FLOAT_REGISTER)
             {
                 panic(ERROR_UNDEFINED, "floats still not implemented", compiler);
             }
@@ -151,113 +174,98 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
             break;
         }
 
-    case STMT_ELIF: {
-        evaluate_expression_x86_64(stmt->stmnt_if.condition, compiler, output, true);
-        compiler->if_statements++;
+    case STMT_IF: {
+
+        size_t current_if_id = compiler->counters->if_statements++;
+        push_to_if_stack(current_if_id, compiler);
+
+        evaluate_expression_x86_64(stmt->stmnt_if.condition, compiler, output, 1, DATA_TYPE_INT);
         // till now what is printed:
         //cmp rax, rbx
         //jne 
         
+        // where to jump if the condition is false
+        if (stmt->stmnt_if.or_else) {
+        write_to_buffer(".Lelse_", 7, output, compiler);
+        } else {
+            write_to_buffer(".end_if_", 8, output, compiler);
+        }
+        nums_to_str(current_if_id, num_len, output, compiler);
+        write_to_buffer("\n", 1, output, compiler);
+
+        // generate the code itself
+        if (stmt->stmnt_if.then->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
+        else generate_statement_code(stmt->stmnt_if.then, num_len, output, compiler);
+
+        // now that we have finished the then block, we go to endif, then we write the logic for else
+        int len0 = snprintf(buffer, sizeof(buffer), "jmp .end_if_%lu\n", current_if_id);
+        write_to_buffer(buffer, len0, output, compiler);
+
         if (stmt->stmnt_if.or_else)
         {
-            write_to_buffer(".Lelse_", 7, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
-            // jne .Lelse_3
-            // for example
-            
-
-            generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
-
-
-            // now jump to endif
-            write_to_buffer("jmp .end_if_", 12, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
             // now the else block
-            write_to_buffer(".Lelse_", 7, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer(":\n", 2, output, compiler);
+            int len1 = snprintf(buffer, sizeof(buffer), ".Lelse_%lu:\n", current_if_id);
+            write_to_buffer(buffer, len1, output, compiler);
+
             // .Lelse_3:\n
-            if (stmt->stmnt_if.or_else->type == STMT_ELIF) { // else if case
+            if (stmt->stmnt_if.or_else->type == STMT_IF) { // else if case
                 generate_statement_code(stmt->stmnt_if.or_else, num_len, output, compiler);
             } else { // plain else case
-                generate_block_code(stmt->stmnt_if.or_else, num_len, output, compiler);
+                if (stmt->stmnt_if.or_else->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.or_else, num_len, output, compiler);
+                else generate_statement_code(stmt->stmnt_if.or_else, num_len, output, compiler);
                 // compiler->if_statements++;
             }
             
         }
-        
-        else {
-            write_to_buffer(".end_if_", 8, output, compiler);
-            nums_to_str(peek_endifs(compiler), num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
-            // jne .Lelse_3 for example
-    
-            generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
-        }
 
         // now the end_if
         write_to_buffer(".end_if_", 8, output, compiler);
-        nums_to_str(compiler->if_statements, num_len, output, compiler);
+        nums_to_str(peek_if_stack(compiler), num_len, output, compiler);
         write_to_buffer(":\n", 2, output, compiler);
-        compiler->if_statements++;
+        compiler->counters->if_statements++;
+        pop_from_if_stack(compiler);
         break;
     }
 
-    case STMT_IF: {
-        evaluate_expression_x86_64(stmt->stmnt_if.condition, compiler, output, true);
-        push_endifs(compiler);
-        compiler->if_statements++;
-        // till now what is printed:
-        //cmp rax, rbx
-        //jne 
-        
-        if (stmt->stmnt_if.or_else)
-        {
-            write_to_buffer(".Lelse_", 7, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
-            // jne .Lelse_3
-            // for example
-            
-
-            generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
-
-
-            // now jump to endif
-            write_to_buffer("jmp .end_if_", 12, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
-            // now the else block
-            write_to_buffer(".Lelse_", 7, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer(":\n", 2, output, compiler);
-            // .Lelse_3:\n
-            if (stmt->stmnt_if.or_else->type == STMT_ELIF) { // else if case
-                generate_statement_code(stmt->stmnt_if.or_else, num_len, output, compiler);
-            } else { // plain else case
-                generate_block_code(stmt->stmnt_if.or_else, num_len, output, compiler);
-                // compiler->if_statements++;
-            }
-            
-        }
-        
-        else {
-            write_to_buffer(".end_if_", 8, output, compiler);
-            nums_to_str(compiler->if_statements, num_len, output, compiler);
-            write_to_buffer("\n", 1, output, compiler);
-            // jne .Lelse_3 for example
+    case STMT_BREAK:{
+        size_t counter = peek_while_stack(compiler);
+        int len1 = snprintf(buffer, sizeof(buffer), "jmp .end_while_loop_%lu\n", counter);
+        write_to_buffer(buffer, len1, output, compiler);
+        break;
+    }
     
-            generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
-        }
+    case STMT_WHILE: {
+        /*
+        jmp .condition_{while loop counter}
+        .while_loop_{while loop counter}:
+        code block
+        
+        .condition_{while loop counter}:
+        evaluate condition
+        jne .loop_{while loop counter}
 
-        // now the end_if
-        write_to_buffer(".end_if_", 8, output, compiler);
-        nums_to_str(peek_endifs(compiler), num_len, output, compiler);
-        write_to_buffer(":\n", 2, output, compiler);
-        compiler->if_statements++;
-        pop_endifs(compiler);
+        .end_loop_{while loop counter}:
+        */
+
+        size_t counter = stmt->stmnt_while.counter;
+
+        push_to_while_stack(counter, compiler);
+
+        int len = snprintf(buffer, sizeof(buffer), "jmp .condition_while_%lu\n.while_loop_%lu:\n", counter, counter);
+        write_to_buffer(buffer, len, output, compiler);
+
+        generate_block_code(stmt->stmnt_while.body, num_len, output, compiler);
+
+        pop_from_while_stack(compiler);
+
+        int len0 = snprintf(buffer, sizeof(buffer), ".condition_while_%lu:\n", counter);
+        write_to_buffer(buffer, len0, output, compiler);
+
+        evaluate_expression_x86_64(stmt->stmnt_while.condition, compiler, output, 2, DATA_TYPE_INT); 
+
+        int len1 = snprintf(buffer, sizeof(buffer), ".while_loop_%lu\n.end_while_loop_%lu:\n", counter, counter);
+        write_to_buffer(buffer, len1, output, compiler);
+
         break;
     }
     default:
@@ -272,12 +280,12 @@ void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output){
     write_to_buffer("section .text\n\tglobal _start\n_start:\n", 37, output, compiler);
     // will move to function handling later
     write_to_buffer("push rbp\nmov rbp, rsp\nsub rsp, ", 31, output, compiler);
-    nums_to_str(compiler->symbol_table_stack->storage[0]->scope_offset, &num_len, output, compiler);
+    size_t glbl_scope_offset = compiler->symbol_table_stack->storage[0]->scope_offset;
+    nums_to_str(((glbl_scope_offset + 7) & ~7), &num_len, output, compiler);
 
     write_to_buffer("\n", 1, output, compiler);
     while (i < AST->node_count)
     {
-        printf("\n\n\n\n______________________________\n\n%i\n\n____________________\n\n\n", AST->nodes[i]->type);
         switch (AST->nodes[i]->type)    
         {
         
@@ -286,7 +294,7 @@ void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output){
             break;
         case NODE_EXPRESSION:
             // This handles top-level expressions like "my_function();"
-            evaluate_expression_x86_64(AST->nodes[i]->expr, compiler, output, false);
+            evaluate_expression_x86_64(AST->nodes[i]->expr, compiler, output, 0, DATA_TYPE_INT);
             break;
         default:
             break;
@@ -294,30 +302,16 @@ void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output){
         i++;
     }
     i = 0;
-    printf("----------------------------------------------------------\n");
     write_to_buffer("\n; Exit program\nmov rax, 60\nmov rdi, 0\nsyscall", 46, output, compiler);
     write_to_buffer("\n\n\n\n", 4, output, compiler);
-    while (i < AST->node_count)
+    while (i < AST->function_node_count)
     {
-        // Check if the node is actually a statement first
-    if (AST->nodes[i]->type == NODE_STATEMENT) 
-    {
-        // USE ->stmnt, NOT ->expr
-        switch (AST->nodes[i]->stmnt->type) 
-        {
-        case STMT_FUNCTION: // Use the correct enum (was STMT_FUNCTION in struct, make sure enums match)
-            generate_function_code(AST->nodes[i]->stmnt, &num_len, output, compiler);
-            break;
-        default:
-            break;
-        }
+        generate_function_code(AST->function_nodes[i]->stmnt, &num_len, output, compiler);
+        i++;
     }
-    i++;
-    }
+    
+    
 
-
-    //flush remaining buffer to file
-    write_to_buffer("\n; Exit program\nmov rax, 60\nmov rdi, 0\nsyscall", 46, output, compiler);
 
     write_to_buffer("\nsection .rodata\nerr_div0:\tdb \"division by zero\", 10\nerr_div0_len:  equ $ - err_div0\n", 85, output, compiler);
     fwrite(compiler->buffer, 1, compiler->currentsize, output);

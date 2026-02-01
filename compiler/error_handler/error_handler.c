@@ -1,7 +1,13 @@
 #include "utilities/utils.h"
 #include "arena/arena.h"
 #include "error_handler/error_handler.h"
-
+#include "frontend/parsing/parsing.h"
+void warning(char* message, Compiler* compiler) {
+    if(compiler->parser){
+        fprintf(stderr, " at line %zu: \n", peek(compiler->parser, 0)->line);
+    }
+    fprintf(stderr, "\n%s\n", message);
+}
 void panic(error_code error_code, char* message, Compiler* compiler)
 {
     switch (error_code) {
@@ -37,33 +43,12 @@ void panic(error_code error_code, char* message, Compiler* compiler)
             break;
     }
     if(compiler->parser){
-        fprintf(stderr, " at line %zu: \n", compiler->parser->current_line);
+        fprintf(stderr, " at line %zu: \n", peek(compiler->parser, 0)->line);
     }
     fprintf(stderr, "\n%s\n", message);
     fprintf(stderr, "compilation process stopped\n");
 
     free_global_arenas(compiler);
-    if (compiler->ast)
-    {
-        fprintf(stderr, "freeing the AST\n");
-        free(compiler->ast->nodes);
-        free(compiler->ast->parser);
-        free(compiler->ast);
-        exit(error_code);
-    }
-
-    else if (compiler->parser)
-    {
-        fprintf(stderr, "freeing the parser\n");
-        free(compiler->parser);
-        exit(error_code);
-    }
-
-    else
-    {
-        fprintf(stderr, "nothing to free\n");
-        exit(error_code);
-    }
     
-
+    exit(error_code);
 }
