@@ -4,6 +4,7 @@ output
 *.asm
 
 # Editor backups
+*.c.save
 *.save
 *.bak
 
@@ -11,6 +12,9 @@ output
 .vscode/
 .idea/
 .zonidentifier
+
+# Git ignore itself
+.gitignore
 
 # The TODO app by mostafahagras
 todo.md
