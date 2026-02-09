@@ -53,8 +53,6 @@ node* create_unary_node(TokenType op, node* operand, Compiler* compiler)
 
 node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_foldable, Compiler* compiler)
 {
-    printf("Making binary node with left type %d and operator %d\n", left->expr->type, op);
-    printf("node left %d\n", left->expr->type);
     node* right_node = parse_expression(parser, presedences[op], constant_foldable, compiler);
     if (!right_node) {
         panic(ERROR_MEMORY_ALLOCATION, "Binary expression allocation failed", compiler);
@@ -117,7 +115,6 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         }
     }
     else {
-        printf("left type: %i, right type: %i\n", left->expr->result_type, right_node->expr->result_type);
         panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
     }
 
@@ -126,7 +123,6 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
     bin_node->expr->binary.right = right_node->expr;
     bin_node->expr->binary.constant_foldable = constant_foldable;
 
-    printf("Creating binary node with operator %d\n", op);
     switch (op)
     {
     case TOK_ADD:
@@ -177,7 +173,6 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         fprintf(stderr, "unidentified operator\n");
         panic(ERROR_SYNTAX, "Unknown binary operator", compiler);
     }
-    printf("Done with the bin node\n");
     return bin_node;
 }
 
@@ -190,18 +185,15 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
         panic(ERROR_UNDEFINED, "Function not found", compiler);
     }
 
-    printf("here1\n");
 
     if(func_dec_node->param_count != param_count) panic(ERROR_ARGUMENT_COUNT, "Wrong number of arguments in function call", compiler);
     
-    printf("here2\n");
 
     for (size_t i = 0; i < param_count; i++)
     {
         if(arguments[i].result_type != func_dec_node->parameters[i].variable.data_type) panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
     }
     
-    printf("here3\n");
 
     node* func_call_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
     if(!func_call_node) return NULL;
@@ -223,15 +215,12 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     node* var_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
     if(!var_node) panic(ERROR_MEMORY_ALLOCATION, "Variable node allocation failed", compiler);
     var_node->type = NODE_EXPRESSION;
-    printf("Creating variable node for %.*s\n", (int)length, var_name);
     var_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
     if(!var_node->expr) panic(ERROR_MEMORY_ALLOCATION, "Variable node allocation failed", compiler);
-    printf("checkpoint\n");
     var_node->expr->variable.length = length;
     var_node->expr->variable.name = var_name;
     var_node->expr->type = EXPR_IDENTIFIER;
     var_node->expr->variable.hash = hash_function(var_name, length);
-    printf("checkpoint2\n");
     
     // Look up the variable in the symbol table
     symbol_node* found_symbol = find_variable(compiler, var_node->expr->variable.hash, var_name, length);
@@ -241,7 +230,6 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     }
 
 
-    printf("DEBUG: Found symbol '%.*s' with data_type=%d\n", (int)length, var_name, found_symbol->data_type);
 
 
     var_node->expr->variable.node_in_table = found_symbol;
@@ -249,7 +237,6 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     var_node->expr->variable.data_type = found_symbol->data_type;
     var_node->expr->result_type = found_symbol->data_type;
     
-    printf("DEBUG: Variable '%.*s' result_type set to %d\n", (int)length, var_name, var_node->expr->result_type);
     
 
     return var_node;

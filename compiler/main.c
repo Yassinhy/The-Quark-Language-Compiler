@@ -12,8 +12,8 @@ int main(int argc, char** argv) {
     // test
     clock_t start = clock();
     // parameter checker for ./phc <filename>
-    if (argc != 3) {
-        printf("Usage: %s <file.ph> <architecture>\n", argv[0]);
+    if (argc != 4) {
+        printf("Usage: %s <file.ph> <architecture> <output program name>\n", argv[0]);
         return 1;
     }
 
@@ -23,7 +23,6 @@ int main(int argc, char** argv) {
 
     //initialize compiler arenas
     Compiler* compiler = init_compiler_arenas(*file_length);
-    warning("testing warning", compiler);
     // tokenize
     size_t* token_count = malloc(sizeof(size_t));
     size_t* function_count = malloc(sizeof(size_t));
@@ -40,35 +39,29 @@ int main(int argc, char** argv) {
     parser->token_count = *token_count;
 
     // Abstract Syntax Tree
-    printf("43 main start\n");
     AST* ast = arena_alloc(compiler->statements_arena, sizeof(AST), compiler);
 
     compiler->ast = ast;
     ast->nodes = arena_alloc(compiler->statements_arena, sizeof(node*) * *token_count, compiler);  // Allocate pointer array
     
-    printf("line 50 start\n");
-    printf("sizeof(node*) * (*function_count + 20): %lu\n", sizeof(node*) * (*function_count + 20));
     ast->function_nodes = arena_alloc(compiler->statements_arena, (sizeof(node*) * (*function_count + 20)), compiler);  // Allocate pointer array
-    printf("line 50 end\n");
     ast->node_count = 0;
     ast->function_node_count = 0;
     ast->parser = parser;
 
     // First pass
-    printf("first pass\n");
     while (parser->current < (*token_count - 1)) {
         if (peek(parser, 0)->type == TOK_FN) {
             ast->function_nodes[ast->function_node_count++] = parse_function_node(compiler, parser);
-            printf("done with this\n");
         }
         else {
             advance(parser);
         }
     }
-    printf("reseting parser\n");
+
     // reset parser
     compiler->parser->current = 0;
-    printf("now at after reset: %i\n", peek(parser, 0)->type);
+
     // parse code
     while (parser->current < *token_count - 1) {
         node* parsed_node = parse_statement(compiler, parser);
@@ -107,10 +100,21 @@ int main(int argc, char** argv) {
     free_global_arenas(compiler);
     
     clock_t end = clock();
-    system("nasm -f elf64 output.asm && ld output.o -o output");
+
+    char command[512];
+    // build the command string
+    snprintf(command, sizeof(command), 
+            "nasm -f elf64 %s.asm && ld %s.o -o %s", 
+            argv[3], argv[3], argv[3]);
+
+    int result = system(command);
+
+    if (result != 0) {
+        fprintf(stderr, "Compilation or linking failed.\n");
+    }
     double time_spent = ((double)(end - start)) / CLOCKS_PER_SEC;
     
-    printf("Code executed in %.6f seconds\n", time_spent);
+    printf("Code compiled in %.6f seconds\n", time_spent);
     
     return 0;
 }

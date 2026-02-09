@@ -317,7 +317,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 2 < *file_length && source[i + 1] == 'n' && source[i + 2] == 't') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_INT;
-                    printf("DEBUG: Tokenized 'int' as DATA_TYPE_INT (%d)\n", DATA_TYPE_INT);
                     i += 3;
                     found_datatype = true;
                 }
@@ -326,7 +325,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 4 < *file_length && source[i + 1] == 'l' && source[i + 2] == 'o' && source[i + 3] == 'a' && source[i + 4] == 't') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_FLOAT;
-                    printf("DEBUG: Tokenized 'float' as DATA_TYPE_FLOAT (%d)\n", DATA_TYPE_FLOAT);
                     i += 5;
                     found_datatype = true;
                 }
@@ -335,7 +333,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'o' && source[i + 3] == 'l') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_BOOL;
-                    printf("DEBUG: Tokenized 'bool' as DATA_TYPE_BOOL (%d)\n", DATA_TYPE_BOOL);
                     i += 4;
                     found_datatype = true;
                 }
@@ -344,7 +341,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 3 < *file_length && source[i + 1] == 'h' && source[i + 2] == 'a' && source[i + 3] == 'r') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_CHAR;
-                    printf("DEBUG: Tokenized 'char' as DATA_TYPE_CHAR (%d)\n", DATA_TYPE_CHAR);
                     i += 4;
                     found_datatype = true;
                 }
@@ -353,7 +349,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'n' && source[i + 3] == 'g') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_LONG;
-                    printf("DEBUG: Tokenized 'long' as DATA_TYPE_LONG (%d)\n", DATA_TYPE_LONG);
                     i += 4;
                     found_datatype = true;
                 }
@@ -362,7 +357,6 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 5 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'u' && source[i + 3] == 'b' && source[i + 4] == 'l' && source[i + 5] == 'e') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_DOUBLE;
-                    printf("DEBUG: Tokenized 'double' as DATA_TYPE_DOUBLE (%d)\n", DATA_TYPE_DOUBLE);
                     i += 6;
                     found_datatype = true;
                 }
@@ -371,14 +365,12 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
                 if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'i' && source[i + 3] == 'd') {
                     tokens[*token_count].type = TOK_DATATYPE;
                     tokens[*token_count].data_type = DATA_TYPE_VOID;
-                    printf("DEBUG: Tokenized 'void' as DATA_TYPE_VOID (%d)\n", DATA_TYPE_VOID);
                     i += 4;
                     found_datatype = true;
                 }
                 break;
             
             default:
-                printf("ERROR: Unrecognized data type starting with '%c' at line %zu\n", source[i], line_number);
                 panic(ERROR_SYNTAX, "unidentified data type", compiler);
         }
             if (!found_datatype) {

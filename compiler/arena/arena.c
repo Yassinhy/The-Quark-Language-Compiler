@@ -3,23 +3,31 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "arena/arena.h"
 
 
 static size_t alloc_count = 0;
 
 void* arena_alloc(Arena* arena, size_t old_data_size, Compiler* compiler) {
-    printf("data size: %lu, capacity: %lu, current size: %lu\n", old_data_size, arena->capacity, arena->current_size);
     size_t data_size = (old_data_size + 7) & ~7; // Align to 8 bytes
     alloc_count++;
-
-    if (alloc_count % 1000 == 0) {
-        printf("[ARENA] alloc_count = %zu\n", alloc_count);
-    }
-
     if (arena->current_size + data_size > arena->capacity) {
-        panic(ERROR_MEMORY_ALLOCATION, "Not enough memory for more allocation", compiler);
+        size_t new_capacity = arena->capacity;
+        
+        // Calculate new capacity (doubling until it fits the new data)
+        while (arena->current_size + data_size > new_capacity) {
+            new_capacity *= 2;
+        }
+        void* new_data = realloc(arena->data, new_capacity);
+        if (!new_data) {
+            panic(ERROR_MEMORY_ALLOCATION, "Not enough memory to grow arena", compiler);
+        }
+
+        arena->data = (uint8_t*)new_data;
+        arena->capacity = new_capacity;
     }
+
     void* data = &arena->data[arena->current_size];
     arena->current_size += data_size;
     return data;
@@ -56,7 +64,7 @@ void free_global_arenas(Compiler* arenas) {
     if (arenas->statements_arena) free_arena(arenas->statements_arena);
     if (arenas->expressions_arena) free_arena(arenas->expressions_arena);
     if(arenas->symbol_arena) free_arena(arenas->symbol_arena);
-    printf("freed");
+    
     if (arenas->symbol_table_stack) {
         if (arenas->symbol_table_stack->storage) {
             free(arenas->symbol_table_stack->storage);
@@ -75,7 +83,6 @@ void free_global_arenas(Compiler* arenas) {
 
 Compiler* init_compiler_arenas(size_t file_length) {
     Compiler* arenas = malloc(sizeof(Compiler));
-    printf("file length: %lu\n", file_length);
     arenas->token_arena = initialize_arena((file_length + 1) * 10 * sizeof(token));
     arenas->statements_arena = initialize_arena(file_length * 10 * (sizeof(statement) + sizeof(node)));
     arenas->expressions_arena = initialize_arena(file_length * 10 * sizeof(expression));
@@ -130,7 +137,6 @@ Compiler* init_compiler_arenas(size_t file_length) {
 }
 
 void push_to_while_stack(size_t counter, Compiler* compiler) {
-    printf("end while counter is: %lu\n", counter);
     if (compiler->counters->end_whiles_current + 1 > compiler->counters->end_whiles_capacity) {
         size_t* tmp_stack = realloc(compiler->counters->end_whiles_stack, compiler->counters->end_whiles_capacity * 2 * sizeof(size_t));
         if (!tmp_stack) panic(ERROR_RUNTIME, "nested too many scopes, not enough memory for more", compiler);
@@ -158,7 +164,6 @@ size_t peek_while_stack(Compiler* compiler) {
 }
 
 void push_to_if_stack(size_t counter, Compiler* compiler) {
-    printf("end if counter is: %lu\n", counter);
     if (compiler->counters->end_ifs_current + 1 > compiler->counters->end_ifs_capacity) {
         size_t* tmp_stack = realloc(compiler->counters->end_ifs_stack, compiler->counters->end_ifs_capacity * 2 * sizeof(size_t));
         if (!tmp_stack) panic(ERROR_RUNTIME, "nested too many scopes, not enough memory for more", compiler);

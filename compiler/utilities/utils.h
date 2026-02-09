@@ -136,7 +136,7 @@ typedef struct token
     TokenType type;
     union
     {
-        struct test
+        struct
         {
             char *starting_value;
             size_t length;

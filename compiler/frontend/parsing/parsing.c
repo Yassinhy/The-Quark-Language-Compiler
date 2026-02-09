@@ -11,11 +11,8 @@
 
 Parser *make_parser(Compiler *compiler)
 {
-    printf("parser 14 start\n");
     
     Parser *parser = arena_alloc(compiler->statements_arena, sizeof(Parser), compiler);
-    
-    printf("parser 14 end\n");
 
     if (!parser)
     {
@@ -55,7 +52,6 @@ bool match(Parser *parser, TokenType type)
 
 node* parse_statement(Compiler *compiler, Parser *parser)
 {
-    printf("\n\n statement getting parsed is: %i \n\n", peek(parser, 0)->type);
     switch (peek(parser, 0)->type)
     {
     case TOK_EXIT:
@@ -71,14 +67,12 @@ node* parse_statement(Compiler *compiler, Parser *parser)
         return skip_function_decleration(compiler, parser);
         break;
     case TOK_IF:
-        printf("here\n");
         return parse_if_node(compiler, parser);
         break;
     case TOK_WHILE:
         return parse_while_node(compiler, parser);
         break;
     case TOK_BREAK:
-        printf("found break node\n");
         return parse_break_node(compiler, parser);
         break;
     case TOK_IDENTIFIER:
@@ -172,8 +166,6 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
     let_node->type = NODE_STATEMENT;
     advance(parser); // consume let
 
-    printf("CONSUMED LET\n");
-
     let_node->stmnt = arena_alloc(compiler->statements_arena, sizeof(statement), compiler);
     if (!let_node->stmnt) panic(ERROR_MEMORY_ALLOCATION, "Exit node statement allocation failed", compiler);
 
@@ -184,44 +176,32 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
     let_node->stmnt->stmnt_let.name = identifier_token->str_value.starting_value;
     let_node->stmnt->stmnt_let.name_length = identifier_token->str_value.length;
 
-    printf("ADDED SOME INFO\n");
 
     // we need this info: add_var_to_current_scope(expression* variable, variable_storage_type storage_type, normal_register reg_location)
     //  and this info:   node* create_variable_node_dec(string var_name ✅, size_t length ✅ , variable_storage_type storage_type ✅ , normal_register reg_location ✅ , Data_type data_type)
     let_node->stmnt->stmnt_let.hash = hash_function(peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length);
     advance(parser); // consume identifier
 
-    printf("CONSUMED IDENTIDIER\n");
 
     token *data_type_token = advance(parser); // consume data type
-
-    printf("CONSUMED 1\n");
-
-    printf("DATA TYPE TOKEN TYPE: %i\n", data_type_token->type);
 
     if (data_type_token->type != TOK_DATATYPE)
         panic(ERROR_ARGUMENT_COUNT, "undefined type", compiler);
 
-    printf("CONSUMED 2\n");
 
     create_variable_node_dec(identifier_token->str_value.starting_value, identifier_token->str_value.length, STORE_IN_STACK, 0, data_type_token->data_type, compiler);
 
-    printf("CONSUMED 3\n");
 
     token *t = advance(parser); // consume equal
 
-    printf("CONSUMED 4\n");
 
     if (t->type != TOK_EQUAL)
     {
         panic(ERROR_SYNTAX, "usage: let var = value;", compiler);
     }
 
-    printf("EVALUATING\n");
 
     let_node->stmnt->stmnt_let.value = parse_expression(parser, presedences[TOK_EQUAL], true, compiler)->expr;
-    
-    printf("DONE WITH THE EVALUATION\n");
 
     advance(parser); // consume ;
     return let_node;
@@ -285,7 +265,6 @@ node *parse_while_node(Compiler *compiler, Parser *parser)
     while_node->stmnt->stmnt_while.condition = parse_expression(parser, PREC_NONE, true, compiler)->expr;
     if (peek(parser, 0)->type != TOK_RPAREN)
     {
-        printf("tok_rparen: %i\n", peek(parser, 0)->type);
         panic(ERROR_SYNTAX, "Didn't close parenthesis at the if/ else if statement", compiler);
     }
     advance(parser); // consume )
@@ -406,24 +385,20 @@ node *parse_elseif_node(Compiler *compiler, Parser *parser, size_t* has_return)
 
 node *parse_else_node(Compiler *compiler, Parser *parser, size_t* has_return)
 {
-    printf("parsing else node\n");
     if (advance(parser)->type != TOK_ELSE) panic(ERROR_SYNTAX, "expected else statement", compiler);
 
     if (peek(parser, 0)->type == TOK_IF) // else if
     {
         node *else_if = parse_elseif_node(compiler, parser, has_return);
         else_if->stmnt->type = STMT_IF;
-        printf("done parsing else node v1\n");
         return else_if;
     }
     else if (peek(parser, 0)->type == TOK_LBRACE) // else {}
     {
         if (peek(parser, 0)->type == TOK_LBRACE){
-            printf("done parsing else node v2\n");
             return parse_code_block2(compiler, parser, NULL, 0, 0, has_return); // now finished } // if it had a return value, then has_return will be 1
         }
         else {
-            printf("done parsing else node v3\n");
             return parse_statement(compiler, parser);
         }
     }
@@ -463,7 +438,6 @@ node* skip_function_decleration(Compiler* compiler, Parser* parser) {
                 break;
         
         }
-        printf("Stack: %lu\n", stack);
         advance(parser);
     }
     print_token(peek(parser, 0)->type);
@@ -556,10 +530,6 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.length = name->str_value.length;
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.hash = hash_function(name->str_value.starting_value, name->str_value.length);
             token *data_type = advance(parser); // consume param data type
-            
-            printf("DEBUG param: name=%.*s, data_type token value=%d\n", 
-            (int)name->str_value.length, name->str_value.starting_value, 
-            data_type->data_type);
 
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.data_type = data_type->data_type;
             advance(parser); // consume , or )  it doesn't rly matter
@@ -571,13 +541,11 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     func_stmt->stmnt->stmnt_function_declaration.function_node->return_type = advance(parser)->data_type;
     // consumed return type
     // now at {
-    printf("before codeblock\n");
     
     append_function_to_func_map(func_stmt->stmnt->stmnt_function_declaration.function_node, func_stmt->stmnt->stmnt_function_declaration.index, compiler);
     
     func_stmt->stmnt->stmnt_function_declaration.function_node->code_block = parse_code_block(compiler, parser, true, func_stmt->stmnt->stmnt_function_declaration.function_node->parameters, func_stmt->stmnt->stmnt_function_declaration.function_node->param_count, func_stmt->stmnt->stmnt_function_declaration.function_node->return_type)->stmnt;
     func_stmt->stmnt->stmnt_function_declaration.function_node->next = NULL;
-    printf("after code block\n");
     
     return func_stmt;
 }
@@ -710,7 +678,6 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
         }
 
         case TOK_BREAK:
-            printf("found break node\n");
             statement = parse_break_node(compiler,  parser);
             break;
 
@@ -725,7 +692,6 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
                 Data_type expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
                 if (statement->stmnt->stmnt_return.return_data_type != expected_return_type)
                 {
-                    printf("scope data type: %d, return type: %d\n", expected_return_type, statement->stmnt->stmnt_return.return_data_type);
                     panic(ERROR_TYPE_MISMATCH, "Incompatible return type of output with current scope", compiler);
                 }
             }
@@ -760,35 +726,26 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
 
 node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, size_t param_count, Data_type function_return_type, size_t* path_exahustion)
 {
-    printf("started with parsing code block 2\n");
     // for function blocks, not a function: 0 a function but no return type: 1 a function with a return type: 2
     if (advance(parser)->type != TOK_LBRACE) panic(ERROR_SYNTAX, "Must start code block using '{'", compiler);
 
-    printf("checkpoint 0\n");
     node *block_node = arena_alloc(compiler->statements_arena, sizeof(node), compiler);
 
-    printf("checkpoint 1\n");
     if (!block_node)    panic(ERROR_MEMORY_ALLOCATION, "Code block node allocation failed", compiler);
 
-    printf("checkpoint 2\n");
     block_node->type = NODE_STATEMENT;
     block_node->stmnt = arena_alloc(compiler->statements_arena, sizeof(statement), compiler);
 
-    printf("checkpoint 3\n");
     if (!block_node->stmnt)    panic(ERROR_MEMORY_ALLOCATION, "Code block statement allocation failed", compiler);
 
-    printf("checkpoint 4\n");
     block_node->stmnt->type = STMT_BLOCK;
 
-    printf("checkpoint 1\n");
     // Save current position
     size_t start_position = parser->current;
     // Fast forward to find matching RBRACE and count statements
     size_t brace_depth = 1;
     size_t stmt_count = 0;
     size_t i = 0;
-    
-    printf("checkpoint 2\n");
 
     while (brace_depth > 0)
     {
@@ -824,34 +781,24 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
         i++;
     }
 
-    printf("checkpoint 3\n");
-
     // Reset parser position
     parser->current = start_position;
-
-    printf("checkpoint A\n");
 
     block_node->stmnt->stmnt_block.statements = (statement **)arena_alloc(compiler->statements_arena, sizeof(statement *) * stmt_count, compiler);
     size_t statement_count = 0;
     enter_new_scope(compiler, function_return_type);
 
-    printf("checkpoint B\n");
     block_node->stmnt->stmnt_block.table = peek_symbol_stack(compiler);
 
-    printf("checkpoint C\n");
     block_node->stmnt->stmnt_block.table->parent_scope = peek_symbol_stack(compiler);
-    
-    printf("checkpoint D\n");
+
     // if the thing has a return value
     int has_ret = 0;
 
     Data_type return_type = DATA_TYPE_UNDEFINED;
 
-    printf("checkpoint E\n");
-
     if (param_count <= 6)
     {
-        printf("checkpoint F\n");
         for (size_t i = 0; i < param_count; i++)
         {
             add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
@@ -859,7 +806,6 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
     }
     else
     {
-        printf("checkpoint F2\n");
         for (int i = 0; i < 6; i++)
         {
             add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
@@ -869,11 +815,9 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
             add_var_to_current_scope(compiler, &(params[i]), STORE_AS_PARAM, 0);
         }
     }
-    printf("checkpoint G\n");
     while (peek(parser, 0)->type != TOK_RBRACE)
     {
         node *statement = NULL;
-        printf("checkpoint: %i\n", peek(parser, 0)->type);
         switch (peek(parser, 0)->type)
         {
         case TOK_EXIT:
@@ -895,25 +839,21 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
 
         case TOK_IDENTIFIER:
         {
-            printf("Arrived to token identifier\n");
             // x = 5;
             if (!peek(parser, 1))
                 panic(ERROR_UNDEFINED, "nothing after identifier\n", compiler);
             if (peek(parser, 1)->type == TOK_EQUAL)
             {
                 // assignment
-                printf("Arrived to token assignment\n");
                 statement = parse_assignment_node(compiler, parser);
             }
             else {
                 statement = parse_expression(parser, PREC_NONE, true, compiler);
             }
-            printf("Arrived to break\n");
             break;
         }
 
         case TOK_BREAK:
-            printf("found break node\n");
             statement = parse_break_node(compiler,  parser);
             break;
 
@@ -929,7 +869,6 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
                 Data_type expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
                 if (return_type != expected_return_type)
                 {
-                    printf("scope data type: %d, return type: %d\n", expected_return_type, return_type);
                     panic(ERROR_TYPE_MISMATCH, "Incompatible return type of output with current scope", compiler);
                 }
             }
@@ -937,7 +876,6 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
         }
         
         default:
-            printf("returneed to default\n");
             statement = parse_expression(parser, PREC_NONE, true, compiler);
             break;
         }
@@ -947,13 +885,11 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
         block_node->stmnt->stmnt_block.statements[statement_count] = statement->stmnt;
         statement_count++;
     }
-    printf("checkpoint H\n");
     *path_exahustion = *path_exahustion + has_ret;
 
     block_node->stmnt->stmnt_block.statement_count = statement_count;
     advance(parser); // consume }
     exit_current_scope(compiler);
-    printf("done with parsing code block 2\n");
     return block_node;
 }
 
@@ -988,34 +924,27 @@ node *parse_expression(Parser *parser, int prev_presedence, bool constant_foldab
 node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
 {
     token *current_token = peek(parser, 0);
-    printf("token type: %i\n", current_token->type);
     if (!current_token)
         return NULL;
     switch (current_token->type)
     {
     case TOK_NUMBER:
     {
-        printf("parsing number\n");
         node *num_node = create_number_node(current_token->int_value, compiler);
         advance(parser); // consume number token
-        printf("done with parsing number\n");
         return num_node;
     }
 
     case TOK_IDENTIFIER:
     {
-        printf("found identifier\n");
         constant_foldable = false;         // look into the token after the identifier to see if it's a function call or variable
         advance(parser);                   // consume identifier token
         token *next_tok = peek(parser, 0); // consume identifier token
         if (next_tok->type == TOK_EOF) panic(ERROR_SYNTAX, "Unexpected end of file after identifier", compiler);
-
-        printf("found identifier\n");
         
         ////////////////////// FUNC CALL   //////////////////////////////
         if (next_tok->type == TOK_LPAREN)
         {
-            printf("found function call\n");
             advance(parser); // consume '('
             // Handle empty arguments: f() or f(void)
             if (peek(parser, 0)->type == TOK_RPAREN ||

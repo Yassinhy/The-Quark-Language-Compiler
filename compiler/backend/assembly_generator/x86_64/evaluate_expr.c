@@ -21,8 +21,6 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
     size_t num_len;
     char buffer[128];
 
-    printf("Evaluating expression of type %d\n", expr->type);
-
     switch (expr->type)
     {
     
@@ -159,7 +157,6 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
 int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int conditional, Data_type wanted_output_result)
 {
     char buffer[128];
-    printf("\n\n\nbinary_exp->binary.right: %i\n\n\n", binary_exp->binary.right->variable.data_type);
     evaluate_expression_x86_64(binary_exp->binary.right, compiler, output, false, wanted_output_result); //right value
 
     int len0 = snprintf(buffer, sizeof(buffer), "push rax\n");

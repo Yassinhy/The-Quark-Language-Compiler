@@ -95,10 +95,8 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
 
 
 symbol_node* find_variable(Compiler* compiler, uint32_t hash, char* var_name, uint32_t var_name_length) {
-    printf("find_variable called\n");
     if(!compiler || !compiler->symbol_table_stack) panic(ERROR_UNDEFINED, "Scope Stack not initialized.", compiler);
     if(!compiler->symbol_table_stack->storage) panic(ERROR_UNDEFINED, "Scope Stack storage not initialized.", compiler);
-    printf("searching for variable: %.*s\n", var_name_length, var_name);
     int64_t i = compiler->symbol_table_stack->current_size - 1;
     while (i >= 0)
     {

@@ -1,142 +1,222 @@
 [
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "frontend/parsing/parsing.o",
-            "frontend/parsing/parsing.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "frontend/parsing/parsing.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "arena/arena.o",
-            "arena/arena.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "arena/arena.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "symbol_table/symbol_table.o",
-            "symbol_table/symbol_table.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "symbol_table/symbol_table.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "backend/assembly_generator/x86_64/x86_64.o",
-            "backend/assembly_generator/x86_64/x86_64.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "backend/assembly_generator/x86_64/x86_64.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "frontend/tokenization/tokenize.o",
-            "frontend/tokenization/tokenize.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "frontend/tokenization/tokenize.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "main.o",
-            "main.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "main.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "backend/assembly_generator/x86_64/evaluate_expr.o",
-            "backend/assembly_generator/x86_64/evaluate_expr.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "backend/assembly_generator/x86_64/evaluate_expr.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "frontend/expression_creation/expressions.o",
-            "frontend/expression_creation/expressions.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "frontend/expression_creation/expressions.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "error_handler/error_handler.o",
-            "error_handler/error_handler.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "error_handler/error_handler.c"
-    },
-    {
-        "arguments": [
-            "gcc",
-            "-c",
-            "-Wall",
-            "-Wextra",
-            "-I.",
-            "-o",
-            "utilities/utils.o",
-            "utilities/utils.c"
-        ],
-        "directory": "/mnt/d/photon/compiler",
-        "file": "utilities/utils.c"
-    }
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "main.o",
+      "main.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/main.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "utilities/utils.o",
+      "utilities/utils.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/utilities/utils.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/utilities/utils.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "symbol_table/symbol_table.o",
+      "symbol_table/symbol_table.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/symbol_table/symbol_table.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/symbol_table/symbol_table.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "frontend/parsing/parsing.o",
+      "frontend/parsing/parsing.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/parsing/parsing.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/parsing/parsing.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "frontend/tokenization/tokenize.o",
+      "frontend/tokenization/tokenize.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/tokenization/tokenize.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/tokenization/tokenize.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "frontend/expression_creation/expressions.o",
+      "frontend/expression_creation/expressions.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/expression_creation/expressions.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/frontend/expression_creation/expressions.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "backend/assembly_generator/x86_64/x86_64.o",
+      "backend/assembly_generator/x86_64/x86_64.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/backend/assembly_generator/x86_64/x86_64.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/backend/assembly_generator/x86_64/x86_64.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "backend/assembly_generator/x86_64/evaluate_expr.o",
+      "backend/assembly_generator/x86_64/evaluate_expr.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/backend/assembly_generator/x86_64/evaluate_expr.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/backend/assembly_generator/x86_64/evaluate_expr.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "arena/arena.o",
+      "arena/arena.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/arena/arena.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/arena/arena.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-g",
+      "-O0",
+      "-Wall",
+      "-Wextra",
+      "-I.",
+      "-Iutilities",
+      "-Iarena",
+      "-Isymbol_table",
+      "-Ifrontend",
+      "-Ibackend",
+      "-c",
+      "-o",
+      "error_handler/error_handler.o",
+      "error_handler/error_handler.c"
+    ],
+    "directory": "/home/yassin/projects/The-Quark-Language-Compiler/compiler",
+    "file": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/error_handler/error_handler.c",
+    "output": "/home/yassin/projects/The-Quark-Language-Compiler/compiler/error_handler/error_handler.o"
+  }
 ]

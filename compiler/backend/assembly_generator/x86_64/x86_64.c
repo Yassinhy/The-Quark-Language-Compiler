@@ -28,7 +28,6 @@ void write_to_buffer(const char* code, size_t code_length, FILE* output, Compile
         fflush(output);  // ← Add this!
         compiler->currentsize = 0;
     }
-    printf("----->%s\n", code);
     memcpy(compiler->buffer + compiler->currentsize, code, code_length);
     compiler->currentsize += code_length;
 }
@@ -111,7 +110,6 @@ static inline void generate_function_code(statement* stmt, size_t* num_len, FILE
 }
 
 static void generate_statement_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
-    printf("STATEMENT TYPE: %i", stmt->type);
     switch (stmt->type)
     {
     case STMT_EXIT:
@@ -152,13 +150,11 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
             
             if (var->where_it_is_stored == STORE_IN_STACK)
             {
-                printf("stored in the stack\n");
                 int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,var->data_type));
                 write_to_buffer(buffer, len, output, compiler);
             }
             else if (var->where_it_is_stored == STORE_IN_REGISTER)
             {
-                printf("stored in register %d\n", var->register_location);
                 if (var->data_type == DATA_TYPE_INT) {
                     int len = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg_x86(2 + var->register_location,  var->data_type), get_reg_x86(0,  var->data_type));
                     write_to_buffer(buffer, len, output, compiler);
