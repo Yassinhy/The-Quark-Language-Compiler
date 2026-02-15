@@ -235,7 +235,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
         write_to_buffer(buffer, len0, output, compiler);
         if (conditional == 0) // store in rax
         {
-            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            int len0 = snprintf(buffer, sizeof(buffer), "setne al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
             write_to_buffer(buffer, len0, output, compiler);
         }
         else if (conditional == 1) {   // for the if statements
@@ -253,7 +253,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
         write_to_buffer(buffer, len0, output, compiler);
         if (conditional == 0) // store in rax
         {
-            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            int len0 = snprintf(buffer, sizeof(buffer), "setg al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
             write_to_buffer(buffer, len0, output, compiler);
         }
         else if (conditional == 1) {   // for the if statements
@@ -271,7 +271,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
         write_to_buffer(buffer, len0, output, compiler);
         if (conditional == 0) // store in rax
         {
-            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            int len0 = snprintf(buffer, sizeof(buffer), "setl al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
             write_to_buffer(buffer, len0, output, compiler);
         }
         else if (conditional == 1) {   // for the if statements
@@ -289,7 +289,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
         write_to_buffer(buffer, len0, output, compiler);
         if (conditional == 0) // store in rax
         {
-            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            int len0 = snprintf(buffer, sizeof(buffer), "setge al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
             write_to_buffer(buffer, len0, output, compiler);
         }
         else if (conditional == 1) {   // for the if statements
@@ -307,7 +307,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
         write_to_buffer(buffer, len0, output, compiler);
         if (conditional == 0) // store in rax
         {
-            int len0 = snprintf(buffer, sizeof(buffer), "sete al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
+            int len0 = snprintf(buffer, sizeof(buffer), "setle al\nmovzx %s, al\n", get_reg(0,  wanted_output_result));
             write_to_buffer(buffer, len0, output, compiler);
         }
         else if (conditional == 1) {   // for the if statements
