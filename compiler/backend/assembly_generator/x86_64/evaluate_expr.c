@@ -5,6 +5,7 @@
 #include "error_handler/error_handler.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define BUFFER_SIZE 256
 
@@ -58,7 +59,7 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
     }
     
     Conversion_type conversion = find_conversion_type(wanted_output_result, var_node->data_type);
-
+    printf(" STACK OFFSET FOR VARIABLE IS: %lu\n", var_node->offset);
     switch (var_node->where_it_is_stored) {
         case STORE_IN_STACK:
             if (conversion == CONVERT_ZERO_EXTEND) {
@@ -178,13 +179,14 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
     size_t num_len;
     char buffer[BUFFER_SIZE];
     printf("EXPRESSION TYPE: %i\n", expr->type);
+    int len;
     switch (expr->type)
     {
     
     case EXPR_INT:
     {
 
-        int len = snprintf(buffer, BUFFER_SIZE, "mov %s, ", get_reg(0, wanted_output_result));
+        len = snprintf(buffer, BUFFER_SIZE, "mov %s, ", get_reg(0, wanted_output_result));
         write_to_buffer(buffer, len, output, compiler);
 
         char* temp2 = _u64_to_str(expr->integer.value, &num_len);
@@ -200,22 +202,33 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
             warning( "function returns address of local variable-- it will be invalid after the function returns", compiler);
         }
         switch (var_node->where_it_is_stored) {
+            case STORE_IN_REGISTER:
+            {
+                len = snprintf(buffer, BUFFER_SIZE, "mov [rbp - %lu], %s\n", expr->address.stack_offset, get_reg(var_node->register_location + 2, var_node->data_type));
+                write_to_buffer(buffer, len, output, compiler);
+                var_node->where_it_is_stored = STORE_IN_STACK;
+                var_node->offset = expr->address.stack_offset;
+                len = snprintf(buffer, BUFFER_SIZE, "lea rax, [rbp - %lu]\n", var_node->offset);
+                write_to_buffer(buffer, len, output, compiler);
+                break;
+            }
+
             case STORE_IN_STACK:
             {
-                int len = snprintf(buffer, BUFFER_SIZE, "lea rax, [rbp - %lu]\n", var_node->offset);
+                len = snprintf(buffer, BUFFER_SIZE, "lea rax, [rbp - %lu]\n", var_node->offset);
                 write_to_buffer(buffer, len, output, compiler);
                 break;
             }
 
             case STORE_AS_PARAM:
             {
-                int len = snprintf(buffer, BUFFER_SIZE, "lea rax, [rbp + %lu]\n", var_node->offset);
+                len = snprintf(buffer, BUFFER_SIZE, "lea rax, [rbp + %lu]\n", var_node->param_offset);
                 write_to_buffer(buffer, len, output, compiler);
                 break;
             }
 
             default:
-                panic(ERROR_LOGICAL, "Trying to obtain the adrress of a register stored variable", compiler);
+                panic(ERROR_LOGICAL, "Trying to obtain the adrress of an invalidly stored variable", compiler);
         }
         break;
     }
@@ -223,7 +236,7 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
     case EXPR_POINTER_DEREF:
     {
         evaluate_expression_x86_64(expr->dereference.operand, compiler, output, conditional, expr->dereference.operand->result_type);
-        int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rax]\n", get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+        len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rax]\n", get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
         write_to_buffer(buffer, len, output, compiler);
         break;
     }
@@ -239,6 +252,7 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         }
         write_to_buffer("; Starting to evaluate\n", 23, output, compiler);
         load_variable_from_storage(var_node, wanted_output_result, compiler, output, buffer);
+        printf("PROBLEM HERE 2\n");
         return;
     }
 
@@ -252,51 +266,54 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
     
     case EXPR_FUNCTION_CALL:
     {
+        data_type* long_data_type = malloc(sizeof(data_type));
+        long_data_type->general_data_type = DATA_TYPE_LONG;
         size_t param_count = expr->func_call.parameter_count;
         write_to_buffer("push r9\npush r8\npush rcx\npush rdx\npush rsi\npush rdi\n", 52, output, compiler);
         
         if (expr->func_call.parameter_count <= 6) {
+            
             for (size_t i = 0; i < param_count; i++)
             {
                 data_type* argument_data_type = expr->func_call.arguments[i].result_type;
 
                 evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false, argument_data_type);
-                if (expr->func_call.arguments[i].variable.address_is_taken) {
-                    int len0 = snprintf(buffer, BUFFER_SIZE, "push rax\n");
-                    write_to_buffer(buffer, len0, output, compiler);
-                }
-                else {
-                    int len0 = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n", get_reg(i + 2, argument_data_type), get_reg(0, argument_data_type));
-                    write_to_buffer(buffer, len0, output, compiler);
-                }
+                len = snprintf(buffer, BUFFER_SIZE, "push rax\n");
+                write_to_buffer(buffer, len, output, compiler);
+                
+            }
+
+            for (int i = (int)param_count - 1; i >= 0; i--)
+            {
+                len = snprintf(buffer, BUFFER_SIZE, "pop %s\n", get_reg(i + 2, long_data_type));
+                write_to_buffer(buffer, len, output, compiler);   
             }
             
         }
         else {
-            size_t i = 0;
-            while (i <= 6)
+            for (int i = 0; i < 6; i++)
             {
                 data_type* argument_data_type = expr->func_call.arguments[i].result_type;
 
                 evaluate_expression_x86_64(&(expr->func_call.arguments[i]), compiler, output, false, argument_data_type);
-
-                if (expr->func_call.arguments[i].variable.address_is_taken) {
-                    int len0 = snprintf(buffer, BUFFER_SIZE, "push rax\n");
-                    write_to_buffer(buffer, len0, output, compiler);
-                }
-                else {
-                    int len0 = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n", get_reg(i + 2, argument_data_type), get_reg(0, argument_data_type));
-                    write_to_buffer(buffer, len0, output, compiler);
-                    i++;
-                }
+                len = snprintf(buffer, BUFFER_SIZE, "push rax\n");
+                write_to_buffer(buffer, len, output, compiler);
+                
             }
-            for (size_t j = param_count - 1; j > 6; j--)
+
+            for (int i = 5; i >= 0; i--)
+            {
+                len = snprintf(buffer, BUFFER_SIZE, "pop %s\n", get_reg(i + 2, long_data_type));
+                write_to_buffer(buffer, len, output, compiler);   
+            }
+/////////////////////////////////////////
+            for (size_t j = param_count - 1; j >= 6; j--)
             {
                 data_type* argument_data_type = expr->func_call.arguments[j].result_type;
 
                 evaluate_expression_x86_64(&(expr->func_call.arguments[j]), compiler, output, false, argument_data_type);
-                int len0 = snprintf(buffer, BUFFER_SIZE, "push rax\n");
-                write_to_buffer(buffer, len0, output, compiler);
+                len = snprintf(buffer, BUFFER_SIZE, "push rax\n");
+                write_to_buffer(buffer, len, output, compiler);
             }
             
             
@@ -305,6 +322,8 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         write_to_buffer(expr->func_call.name, expr->func_call.name_length, output, compiler);
         write_to_buffer("_quark\n", 7, output, compiler);
         write_to_buffer("pop rdi\npop rsi\npop rdx\npop rcx\npop r8\npop r9\n", 46, output, compiler);
+        printf("PROBLEM HERE\n");
+        free(long_data_type);
         break;
     }
 

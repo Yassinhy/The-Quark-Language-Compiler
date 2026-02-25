@@ -46,22 +46,26 @@ node* create_variable_node_dec(char* var_name, size_t length, variable_storage_t
     var_node->expr->variable.data_type = data_type;
     var_node->expr->variable.node_in_table = add_var_to_current_scope(compiler, var_node->expr, storage_type, reg_location); // offset will be set later during code generation and size will be int for now (8 bytes)
     var_node->expr->result_type = data_type;
-    var_node->expr->variable.address_is_taken = false;
+    var_node->expr->variable.node_in_table->address_is_taken = false;
     return var_node;
 }
 
 node* create_address_node(node* operand, Compiler* compiler) {
     if (operand->expr->type != EXPR_IDENTIFIER) panic(ERROR_LOGICAL, "Cannot pass '&' operator to a temporary value, must be passed on a stack or heap allocated variable", compiler);
-    
     node* address_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
     if(!address_node) return NULL;
     address_node->type = NODE_EXPRESSION;
     address_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
     if(!address_node->expr) return NULL;
+    
+    if (operand->expr->variable.node_in_table->where_it_is_stored == STORE_IN_REGISTER || operand->expr->variable.node_in_table->where_it_is_stored == STORE_IN_FLOAT_REGISTER) {
+        address_node->expr->address.stack_offset = peek_symbol_stack(compiler)->scope_offset;
+        peek_symbol_stack(compiler)->scope_offset += Data_type_sizes_from_data_types[operand->expr->variable.data_type->general_data_type];
+    }
 
     address_node->expr->type = EXPR_ADDRESS;
     address_node->expr->address.operand = operand->expr;
-    address_node->expr->address.operand->variable.address_is_taken = true;
+    address_node->expr->address.operand->variable.node_in_table->address_is_taken = true;
 
     address_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
     if (!address_node->expr->result_type) {
@@ -270,10 +274,10 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
     
 
     node* func_call_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
-    if(!func_call_node) return NULL;
+    if(!func_call_node) panic(ERROR_MEMORY_ALLOCATION, "Function call node allocation failed", compiler);
     func_call_node->type = NODE_EXPRESSION;
     func_call_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
-    if(!func_call_node->expr) return NULL;
+    if(!func_call_node->expr) panic(ERROR_MEMORY_ALLOCATION, "Function call expression allocation failed", compiler);
     func_call_node->expr->type = EXPR_FUNCTION_CALL;
     func_call_node->expr->func_call.name = func_name;
     func_call_node->expr->func_call.name_length = name_length;
@@ -305,7 +309,7 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     symbol_node* found_symbol = find_variable(compiler, var_node->expr->variable.hash, var_name, length);
     
     if (!found_symbol) {
-        panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
+        panic(ERROR_UNDEFINED_VARIABLE, "Variable not found while creating variable node", compiler);
     }
 
 

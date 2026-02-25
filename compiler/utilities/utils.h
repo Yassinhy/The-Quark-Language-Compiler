@@ -252,6 +252,7 @@ typedef struct symbol_node
     variable_storage_type where_it_is_stored;
     data_type* data_type;
     struct symbol_node *next;
+    bool address_is_taken;
     union
     {
         uint64_t offset;
@@ -291,7 +292,6 @@ typedef struct expression
             symbol_node *node_in_table;
             size_t hash;
             data_type* data_type;
-            bool address_is_taken;
         } variable;
 
         // binary expressions (x + y)
@@ -323,6 +323,7 @@ typedef struct expression
         struct
         {
             struct expression* operand;
+            size_t stack_offset; // for code generation, how much to subtract from rsp to get to the variable's address after leaking
         } address;
 
         // pointer dereference (ptr.*)
@@ -560,6 +561,9 @@ typedef struct
 
     // for return context
     bool return_context;
+
+    size_t current_function_offset; // for how much to subtract from rsp
+    symbol_table* current_function_symbol_table; 
 
 } Compiler;
 

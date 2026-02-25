@@ -10,7 +10,7 @@
 
 
 const char* regs32_x86[] = {"eax", "ebx", "ecx", "edx", "esi", "edi", "r8d", "r9d"};
-const char* regs64_x86[] = {"rax", "rbx", "rdi", "rsi","rdx", "rcx", "r8 ", "r9 "};
+const char* regs64_x86[] = {"rax", "rbx", "rcx", "rdx","rsi", "rdi", "r8 ", "r9 "};
 
 const char* get_reg_x86( int reg_index, Data_type type) {
     if (type == DATA_TYPE_INT) {
@@ -83,11 +83,12 @@ void enter_existing_scope(symbol_table* new_table, bool independent, Compiler* c
 }
 
 static void generate_block_code (statement* stmt, FILE* output, Compiler* compiler) {
+    enter_existing_scope(stmt->stmnt_block.table, false, compiler);
     for (size_t i = 0; i < stmt->stmnt_block.statement_count; i++)
     {
         generate_statement_code(stmt->stmnt_block.statements[i], output, compiler);
     }
-    
+    exit_current_scope(compiler);
 }
 
 static inline void generate_function_code(statement* stmt, FILE* output, Compiler* compiler) {
@@ -137,11 +138,11 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
 
     case STMT_LET:
         {
-            symbol_node* var = find_variable(compiler, stmt->stmnt_let.hash, stmt->stmnt_let.name, stmt->stmnt_let.name_length);
+            symbol_node* var = find_variable(compiler, hash_function(stmt->stmnt_let.name,  stmt->stmnt_let.name_length), stmt->stmnt_let.name,  stmt->stmnt_let.name_length);
             if (!var) {
                 panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
             }
-
+            printf("EXPRECTED OFFSET IS:              %lu\n\n", var->offset);
             evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
             int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type->general_data_type));
             write_to_buffer(buffer, len, output, compiler);
@@ -152,7 +153,7 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
         {
             symbol_node* var = find_variable(compiler, stmt->stmnt_assign.hash, stmt->stmnt_assign.name, stmt->stmnt_assign.name_length);
             if (!var) {
-                panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
+                panic(ERROR_UNDEFINED_VARIABLE, "Variable not found while assigning value", compiler);
             }
 
             evaluate_expression_x86_64(stmt->stmnt_assign.value, compiler, output, 0, var->data_type); // now the expression is in rax

@@ -118,12 +118,11 @@ data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
 data_type* parse_data_type(Parser *parser, Compiler *compiler)
 {
     printf("STARTED PARSING DATA_TYPE: ");
-    print_token(peek(parser, 0)->type);
+    print_token(peek(parser, 1)->type);
     if (!peek(parser, 0))
     {
         panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
     }
-    print_token(peek(parser, 0)->type);
     if(peek(parser, 0)->type != TOK_COLON) {
         panic(ERROR_INTERNAL, "Expected a colon ':' after variable name", compiler);
     }
@@ -352,7 +351,7 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
     printf("CODE BLOCK 4\n");
 
     create_variable_node_dec(identifier_token->str_value.starting_value, identifier_token->str_value.length, STORE_IN_STACK, 0, data_type_token, compiler);
-
+    printf("AFTER PARSING LET STATEMENT THE OFFSET IS: %lu\n",find_variable(compiler, hash_function(let_node->stmnt->stmnt_let.name,  let_node->stmnt->stmnt_let.name_length), let_node->stmnt->stmnt_let.name,  let_node->stmnt->stmnt_let.name_length)->offset);
 
     token *t = advance(parser); // consume equal
 
@@ -775,12 +774,8 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
     size_t statement_count = 0;
     enter_new_scope(compiler, function_return_type);
     block_node->stmnt->stmnt_block.table = peek_symbol_stack(compiler);
-    if (function_block)
-        block_node->stmnt->stmnt_block.table->parent_scope = compiler->symbol_table_stack->storage[0];
-    else
-    {
-        block_node->stmnt->stmnt_block.table->parent_scope = peek_symbol_stack(compiler);
-    }
+    if (function_block) block_node->stmnt->stmnt_block.table->parent_scope = compiler->symbol_table_stack->storage[0];
+
 
     // if the thing has a return value
     int has_ret = 0;
@@ -789,26 +784,14 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
     {
         for (size_t i = 0; i < param_count; i++)
         {
-            if ((params[i]).variable.address_is_taken) {
-                add_var_to_current_scope(compiler, &(params[i]), STORE_AS_PARAM, 0);
-            }
-            else{
-                add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
-            }
+            add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
         }
     }
     else
     {
         for (int i = 0; i < 6; i++)
         {
-            if ((params[i]).variable.address_is_taken) {
-                add_var_to_current_scope(compiler, &(params[i]), STORE_AS_PARAM, 0);
-                i--;
-                continue;
-            }
-            else{
-                add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
-            }
+            add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
         }
         for (size_t i = param_count - 1; i >= 6; i--)
         {
@@ -900,7 +883,13 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
     exit_current_scope(compiler);
     return block_node;
 }
-
+//////////////////////////////////////////////////////
+////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
+///////////////////////////////////////////////////////
+///////////////////////////////////////////////
 node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, size_t param_count, data_type* function_return_type, size_t* path_exahustion)
 {
     // for function blocks, not a function: 0 a function but no return type: 1 a function with a return type: 2
@@ -963,11 +952,10 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
 
     block_node->stmnt->stmnt_block.statements = (statement **)arena_alloc(compiler->statements_arena, sizeof(statement *) * stmt_count, compiler);
     size_t statement_count = 0;
+    
     enter_new_scope(compiler, function_return_type);
-
     block_node->stmnt->stmnt_block.table = peek_symbol_stack(compiler);
 
-    block_node->stmnt->stmnt_block.table->parent_scope = peek_symbol_stack(compiler);
 
     // if the thing has a return value
     int has_ret = 0;
@@ -1104,6 +1092,7 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
     token *current_token = peek(parser, 0);
     if (!current_token)  return NULL;
     print_token(current_token->type);
+    print_token(peek(parser, 1)->type);
     switch (current_token->type)
     {
     case TOK_NUMBER:
@@ -1125,15 +1114,14 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
         {
             advance(parser); // consume '('
             // Handle empty arguments: f() or f(void)
-            if (peek(parser, 0)->type == TOK_RPAREN ||
-                (peek(parser, 0)->type == TOK_VOID &&
-                 peek(parser, 1)->type == TOK_RPAREN))
+            if (peek(parser, 0)->type == TOK_RPAREN || (peek(parser, 0)->type == TOK_VOID && peek(parser, 1)->type == TOK_RPAREN))
             {
 
                 if (peek(parser, 0)->type == TOK_VOID)
                 {
                     advance(parser); // consume 'void'
                 }
+                printf("DONE PRE PARSING THE FUNCTION CALL\n");
                 advance(parser); // consume ')'
 
                 return create_func_call_node(current_token->str_value.starting_value, current_token->str_value.length, NULL, 0, compiler);
@@ -1144,12 +1132,31 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
 
                 // first pass
                 size_t tmp = 0;
+                size_t depth = 0;
                 while (peek(parser, tmp)->type != TOK_RPAREN)
                 {
-                    if (peek(parser, tmp)->type == TOK_COMMA)
+                    printf("DEPTH = %lu and CURRENT TOKEN is ", depth);
+                    print_token(peek(parser, tmp)->type);
+                    if ((peek(parser, tmp)->type == TOK_COMMA) && (depth == 0)) {
+                        printf("INCREMENTED PARAM COUNT IN LOOP, CURRENT COUNT: %zu\n", param_count + 1);
                         param_count++;
+                        tmp++;
+                    }
+                    else if (peek(parser, tmp)->type == TOK_LPAREN)
+                    {
+                        depth++;
+                        tmp++;
+                    }
+                    else if (peek(parser, tmp)->type == TOK_RPAREN)
+                    {
+                        if (depth == 0)
+                            break;
+                        depth--;
+                        tmp++;
+                    }
                     tmp++;
                 }
+                printf("INCREMENTED PARAM COUNT, CURRENT COUNT: %zu\n", param_count + 1);
                 param_count++;
 
                 // second pass
@@ -1159,11 +1166,11 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                     expressions[i] = *(parse_expression(parser, PREC_NONE, false, compiler)->expr);
                     advance(parser); // consume comma and final R_BRACE
                 }
+                printf("DONE PRE PARSING THE FUNCTION CALL\n");
+                printf("Number of parameters: %zu\n", param_count);
                 return create_func_call_node(current_token->str_value.starting_value, current_token->str_value.length, expressions, param_count, compiler);
-
             }
         }
-
         else if (next_tok->type == TOK_POINTER_DEREF) {
             advance(parser);
             symbol_node *operand = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);

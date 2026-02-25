@@ -128,6 +128,7 @@ exit 0;
 | --- |--- |
 | Path Exahuastion | ✅ Supported |
 | Dead Code Elimination | ✅ Supported |
+| Escape Analysis | ✅ Supported |
 | Tail Call Recursion | 🚧 Planned |
 | Constant Folding | 🚧 Planned |
 | Loop Unfolding | 🚧 Planned |

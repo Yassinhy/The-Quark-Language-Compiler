@@ -20,11 +20,12 @@ void* arena_alloc(Arena* arena, size_t old_data_size, Compiler* compiler) {
         while (arena->current_size + data_size > new_capacity) {
             new_capacity *= 2;
         }
-        void* new_data = realloc(arena->data, new_capacity);
+        void* new_data = malloc(new_capacity);
         if (!new_data) {
             panic(ERROR_MEMORY_ALLOCATION, "Not enough memory to grow arena", compiler);
         }
-
+        memcpy(new_data, arena->data, arena->current_size);
+        free(arena->data);
         arena->data = (uint8_t*)new_data;
         arena->capacity = new_capacity;
     }

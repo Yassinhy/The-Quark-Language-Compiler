@@ -7,7 +7,7 @@
 size_t get_data_type_size(data_type* type, Compiler* compiler) {
     switch (type->data_type_family) {
         case FAMILY_FLAT:
-            return Data_type_sizes[type->flat_type.flat_data_type];
+            return Data_type_sizes_from_data_types[type->general_data_type];
         case FAMILY_POINTER:
             return 8; // A pointer is 8 bytes on a 64-bit system
         default:
@@ -30,7 +30,6 @@ symbol_table* peek_symbol_stack(Compiler* compiler) {
     }
     return current_table;
 }
-
 void enter_new_scope(Compiler* compiler, data_type* scope_data_type) {
     if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
     if (compiler->symbol_table_stack->current_size + 1 >= compiler->symbol_table_stack->capacity) {
