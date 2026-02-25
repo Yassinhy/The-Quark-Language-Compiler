@@ -25,6 +25,7 @@ const uint8_t CHAR_TYPE[256] = {
     ['('] = 8, [')'] = 9, [';'] = 10, [':'] = 12, [','] = 13, 
     ['{'] = 14, ['}'] = 15, ['#'] = 16,
     ['<'] = 17, ['>'] = 18, ['!'] = 19, ['%'] = 20,
+    ['&'] = 21, ['.'] = 22,
 };
 
 static inline int identify_token(const char* value, size_t length, token* the_token, size_t* function_count){
@@ -62,12 +63,27 @@ static inline int identify_token(const char* value, size_t length, token* the_to
                 the_token->type = TOK_ELSE;
                 return 0;
             }
+            if (value[0] == 'l' && value[1] == 'o' &&  value[2] == 'n' && value[3] == 'g')
+            {
+                the_token->type = TOK_LONG;
+                return 0;
+            }
+            if (value[0] == 'v' && value[1] == 'o' &&  value[2] == 'i' && value[3] == 'd')
+            {
+                the_token->type = TOK_VOID;
+                return 0;
+            }
+        
             
             break;
             
         case 3:
             if (value[0] == 'l' && value[1] == 'e' && value[2] == 't') {
                 the_token->type = TOK_LET;
+                return 1;
+            }
+            if (value[0] == 'i' && value[1] == 'n' && value[2] == 't') {
+                the_token->type = TOK_INT;
                 return 1;
             }
             break;
@@ -304,79 +320,45 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
         }
 
         case 12:{
-            tokens[*token_count].line = line_number;         
-            i++;
-            while (source[i] == ' ' || source[i] == '\t' || source[i] == '\r')
-            {
-                i++;
-            }
-            bool found_datatype = false;
-            switch (source[i])
-            {
-                case 'i':
-                if (i + 2 < *file_length && source[i + 1] == 'n' && source[i + 2] == 't') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_INT;
-                    i += 3;
-                    found_datatype = true;
-                }
-                break;
-            case 'f':
-                if (i + 4 < *file_length && source[i + 1] == 'l' && source[i + 2] == 'o' && source[i + 3] == 'a' && source[i + 4] == 't') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_FLOAT;
-                    i += 5;
-                    found_datatype = true;
-                }
-                break;
-            case 'b':
-                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'o' && source[i + 3] == 'l') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_BOOL;
-                    i += 4;
-                    found_datatype = true;
-                }
-                break;
-            case 'c':
-                if (i + 3 < *file_length && source[i + 1] == 'h' && source[i + 2] == 'a' && source[i + 3] == 'r') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_CHAR;
-                    i += 4;
-                    found_datatype = true;
-                }
-                break;
-            case 'l':
-                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'n' && source[i + 3] == 'g') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_LONG;
-                    i += 4;
-                    found_datatype = true;
-                }
-                break;
-            case 'd':
-                if (i + 5 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'u' && source[i + 3] == 'b' && source[i + 4] == 'l' && source[i + 5] == 'e') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_DOUBLE;
-                    i += 6;
-                    found_datatype = true;
-                }
-                break;
-            case 'v':
-                if (i + 3 < *file_length && source[i + 1] == 'o' && source[i + 2] == 'i' && source[i + 3] == 'd') {
-                    tokens[*token_count].type = TOK_DATATYPE;
-                    tokens[*token_count].data_type = DATA_TYPE_VOID;
-                    i += 4;
-                    found_datatype = true;
-                }
-                break;
-            
-            default:
-                panic(ERROR_SYNTAX, "unidentified data type", compiler);
-        }
-            if (!found_datatype) {
-                panic(ERROR_SYNTAX, "expected data type after ':'", compiler);
-            }
+            tokens[*token_count].line = line_number;
+            tokens[*token_count].type = TOK_COLON;           // :
             (*token_count)++;
+            i++;
+            break;
+        }
+        case 21:{
+            if (i + 1 < *file_length && source[i + 1] == '&') { // &&
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_AND;           
+                (*token_count)++;
+                i+=2; 
+                break;
+            }
+            else {   // & only
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_BIT_AND;           // &
+                (*token_count)++;
+                i++;
+                break;
+            }
+            break;
+        }
+
+        case 22: {
+            if (i + 1 < *file_length && source[i + 1] == '*') { // .*
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_POINTER_DEREF;           
+                (*token_count)++;
+                i+=2; 
+                break;
+            }
+            else {   // & only
+                tokens[*token_count].line = line_number;
+                tokens[*token_count].type = TOK_DOT;           // .
+                (*token_count)++;
+                i++;
+                break;
+            }
             break;
         }
 

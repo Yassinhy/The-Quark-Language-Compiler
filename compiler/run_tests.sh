@@ -4,7 +4,7 @@
 # Compiler Test Suite (Refined)
 # ============================================
 
-COMPILER="./my_compiler"
+COMPILER="./quark"
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -54,12 +54,12 @@ run_test() {
     print_test "$test_num" "$test_name"
     
     # Create temporary test file
-    local temp_file=$(mktemp /tmp/test_XXXXXX.ph)
+    local temp_file=$(mktemp /tmp/test_XXXXXX.qk)   # ← .qk extension
     echo "$code" > "$temp_file"
     TEMP_FILES+=("$temp_file")
-    
+
     # Compile
-    "$COMPILER" "$temp_file" x86_64 >/dev/null 2>&1
+    "$COMPILER" "$temp_file" x86_64 output >/dev/null 2>&1 
     local compile_status=$?
     
     if [ $compile_status -ne 0 ]; then
@@ -739,6 +739,252 @@ if (x == 1) {
 }
 exit z;" \
 10
+
+# ============================================
+# Recursion
+# ============================================
+print_header "Recursion"
+
+run_test "10.1" "Recursive factorial" \
+"fn factorial(n: int): int {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+let result :int = factorial(6);
+exit result;" \
+208
+
+run_test "10.2" "Recursive fibonacci" \
+"fn fib(n: int): int {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+let result :int = fib(8);
+exit result;" \
+21
+
+run_test "10.3" "Recursive sum 1..n" \
+"fn sum(n: int): int {
+    if (n <= 0) {
+        return 0;
+    }
+    return n + sum(n - 1);
+}
+let result :int = sum(10);
+exit result;" \
+55
+
+run_test "10.4" "Recursive GCD (Euclidean)" \
+"fn gcd(a: int, b: int): int {
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a % b);
+}
+let result :int = gcd(48, 18);
+exit result;" \
+6
+
+run_test "10.5" "Recursive power" \
+"fn power(base: int, exp: int): int {
+    if (exp == 0) {
+        return 1;
+    }
+    return base * power(base, exp - 1);
+}
+let result :int = power(3, 4);
+exit result;" \
+81
+
+run_test "10.6" "Recursive count-up to target" \
+"fn count_to(current: int, target: int): int {
+    if (current == target) {
+        return current;
+    }
+    return count_to(current + 1, target);
+}
+let result :int = count_to(0, 25);
+exit result;" \
+25
+
+run_test "10.7" "Recursive countdown" \
+"fn countdown(n: int): int {
+    if (n == 0) {
+        return 0;
+    }
+    return countdown(n - 1);
+}
+let result :int = countdown(20);
+exit result;" \
+0
+
+run_test "10.8" "Recursive digit sum" \
+"fn digit_sum(n: int): int {
+    if (n < 10) {
+        return n;
+    }
+    return (n % 10) + digit_sum(n / 10);
+}
+let result :int = digit_sum(493);
+exit result;" \
+16
+
+run_test "10.9" "Recursive max of two via reduction" \
+"fn max(a: int, b: int): int {
+    if (a >= b) {
+        return a;
+    }
+    return b;
+}
+fn max3(a: int, b: int, c: int): int {
+    return max(a, max(b, c));
+}
+let result :int = max3(7, 15, 11);
+exit result;" \
+15
+
+run_test "10.10" "Deep recursion (tail-like accumulator)" \
+"fn accumulate(n: int, acc: int): int {
+    if (n == 0) {
+        return acc;
+    }
+    return accumulate(n - 1, acc + n);
+}
+let result :int = accumulate(15, 0);
+exit result;" \
+120
+
+# ============================================
+# Pointers
+# ============================================
+print_header "Pointers"
+
+run_test "11.1" "Address-of basic" \
+"let y :int = 42;
+let x :*int = &y;
+exit 42;" \
+42
+
+run_test "11.2" "Two pointers to same variable" \
+"let val :int = 99;
+let p1 :*int = &val;
+let p2 :*int = &val;
+exit 99;" \
+99
+
+# ============================================
+# Stress / Boundary Tests
+# ============================================
+print_header "Stress & Boundary"
+
+run_test "12.1" "Large loop iteration" \
+"let i :int = 0;
+while (i < 200) {
+    i = i + 1;
+}
+exit 200;" \
+200
+
+run_test "12.2" "Max int boundary arithmetic" \
+"let x :int = 127;
+let y :int = x - 127;
+exit y;" \
+0
+
+run_test "12.3" "Zero divided into loop guard" \
+"let x :int = 0;
+let count :int = 0;
+while (x < 1) {
+    count = count + 1;
+    x = x + 1;
+}
+exit count;" \
+1
+
+run_test "12.4" "Chained function calls 5 deep" \
+"fn f1(x: int): int { return x + 1; }
+fn f2(x: int): int { return f1(x) + 1; }
+fn f3(x: int): int { return f2(x) + 1; }
+fn f4(x: int): int { return f3(x) + 1; }
+fn f5(x: int): int { return f4(x) + 1; }
+let result :int = f5(0);
+exit result;" \
+5
+
+run_test "12.5" "Alternating add/sub in loop" \
+"let total :int = 0;
+let i :int = 0;
+while (i < 10) {
+    if (i % 2 == 0) {
+        total = total + i;
+    } else {
+        total = total - i;
+    }
+    i = i + 1;
+}
+exit total;" \
+251
+
+run_test "12.6" "Fibonacci at boundary (fib(0))" \
+"fn fib(n: int): int {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+exit fib(0);" \
+0
+
+run_test "12.7" "Factorial(0) == 1" \
+"fn factorial(n: int): int {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+exit factorial(0);" \
+1
+
+run_test "12.8" "Nested loops with functions" \
+"fn square(x: int): int {
+    return x * x;
+}
+let sum :int = 0;
+let i :int = 1;
+while (i <= 3) {
+    let j :int = 1;
+    while (j <= 3) {
+        sum = sum + square(i + j);
+        j = j + 1;
+    }
+    i = i + 1;
+}
+exit sum;" \
+156
+
+run_test "12.9" "GCD of same numbers" \
+"fn gcd(a: int, b: int): int {
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a % b);
+}
+exit gcd(7, 7);" \
+7
+
+run_test "12.10" "Power of 1 is always 1" \
+"fn power(base: int, exp: int): int {
+    if (exp == 0) {
+        return 1;
+    }
+    return base * power(base, exp - 1);
+}
+exit power(1, 100);" \
+1
 
 # ============================================
 # Summary

@@ -38,6 +38,9 @@ void panic(error_code error_code, char* message, Compiler* compiler)
         case ERROR_INTERNAL:
             fprintf(stderr, "Internal compiler error");
             break;
+        case ERROR_LOGICAL:
+            fprintf(stderr, "Logical error");
+            break;
         default:
             fprintf(stderr, "Unknown error");
             break;

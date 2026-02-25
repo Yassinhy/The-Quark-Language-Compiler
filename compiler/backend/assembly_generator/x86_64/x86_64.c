@@ -3,6 +3,7 @@
 #include "error_handler/error_handler.h"
 #include "backend/assembly_generator/x86_64/x86_64.h"
 #include "symbol_table/symbol_table.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 // #include "frontend/expression_creation/expressions.h"
@@ -55,13 +56,15 @@ char* _u64_to_str(size_t number, size_t* num_len)
 }
 
 
-void nums_to_str(size_t number, size_t* num_len, FILE* output, Compiler* compiler)
+void nums_to_str(size_t number, FILE* output, Compiler* compiler)
 {
+    size_t* num_len = malloc(sizeof(size_t));
     char* num_as_str = _u64_to_str(number, num_len);
     write_to_buffer(num_as_str, *num_len, output, compiler);
+    free(num_len);
 }
 
-static void generate_statement_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler);
+static void generate_statement_code(statement* stmt, FILE* output, Compiler* compiler);
 
 void enter_existing_scope(symbol_table* new_table, bool independent, Compiler* compiler) {
     if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
@@ -79,24 +82,26 @@ void enter_existing_scope(symbol_table* new_table, bool independent, Compiler* c
     compiler->symbol_table_stack->current_size++;
 }
 
-static void generate_block_code (statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
+static void generate_block_code (statement* stmt, FILE* output, Compiler* compiler) {
     for (size_t i = 0; i < stmt->stmnt_block.statement_count; i++)
     {
-        generate_statement_code(stmt->stmnt_block.statements[i], num_len, output, compiler);
+        generate_statement_code(stmt->stmnt_block.statements[i], output, compiler);
     }
     
 }
 
-static inline void generate_function_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
+static inline void generate_function_code(statement* stmt, FILE* output, Compiler* compiler) {
     function_node* func_node = stmt->stmnt_function_declaration.function_node;
     write_to_buffer(func_node->name, func_node->name_length, output, compiler);
+    write_to_buffer("_quark", 6, output, compiler);
+    printf("Generating code for function: %.*s\n", (int)func_node->name_length, func_node->name);
     write_to_buffer(":\n", 2, output, compiler);
     write_to_buffer("push rbp\nmov rbp, rsp\n", 22, output, compiler);
 
     enter_existing_scope(func_node->code_block->stmnt_block.table, true, compiler);
 
     write_to_buffer("sub rsp, ", 9, output, compiler);
-    nums_to_str(func_node->code_block->stmnt_block.table->scope_offset, num_len, output, compiler);
+    nums_to_str(func_node->code_block->stmnt_block.table->scope_offset, output, compiler);
     write_to_buffer("\n", 1, output, compiler);
     
     
@@ -104,26 +109,30 @@ static inline void generate_function_code(statement* stmt, size_t* num_len, FILE
     // {
     //     generate_statement_code(func_node->code_block->stmnt_block.statements[i], num_len, output, compiler);
     // }
-    generate_block_code(func_node->code_block, num_len, output, compiler);
+    generate_block_code(func_node->code_block, output, compiler);
 
     exit_current_scope(compiler);
 }
 
-static void generate_statement_code(statement* stmt, size_t* num_len, FILE* output, Compiler* compiler) {
+static void generate_statement_code(statement* stmt, FILE* output, Compiler* compiler) {
     switch (stmt->type)
     {
     case STMT_EXIT:
         {
             // always int
-            evaluate_expression_x86_64(stmt->stmnt_exit.exit_code, compiler, output, 0, DATA_TYPE_INT);
+            printf("CHECHPOINT 7\n");
+            
+            evaluate_expression_x86_64(stmt->stmnt_exit.exit_code, compiler, output, 0, stmt->stmnt_exit.exit_code->result_type);
             int len = snprintf(buffer, sizeof(buffer), "\nmov rdi, rax\nmov rax, 60\nsyscall\n");
             write_to_buffer(buffer, len, output, compiler);
             break;
         }
 
     case STMT_RETURN:
+        compiler->return_context = true;
         evaluate_expression_x86_64(stmt->stmnt_return.value, compiler, output, false, stmt->stmnt_return.return_data_type); // now result is stored in rax
         write_to_buffer("leave\nret\n", 10, output, compiler);
+        compiler->return_context = false;
         break;
 
     case STMT_LET:
@@ -134,7 +143,7 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
             }
 
             evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
-            int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type));
+            int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type->general_data_type));
             write_to_buffer(buffer, len, output, compiler);
             break;
         }
@@ -150,13 +159,13 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
             
             if (var->where_it_is_stored == STORE_IN_STACK)
             {
-                int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,var->data_type));
+                int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,var->data_type->general_data_type));
                 write_to_buffer(buffer, len, output, compiler);
             }
             else if (var->where_it_is_stored == STORE_IN_REGISTER)
             {
-                if (var->data_type == DATA_TYPE_INT) {
-                    int len = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg_x86(2 + var->register_location,  var->data_type), get_reg_x86(0,  var->data_type));
+                if (var->data_type->general_data_type == DATA_TYPE_INT) {
+                    int len = snprintf(buffer, sizeof(buffer), "mov %s, %s\n", get_reg_x86(2 + var->register_location,  var->data_type->general_data_type), get_reg_x86(0,  var->data_type->general_data_type));
                     write_to_buffer(buffer, len, output, compiler);
                 }
             }
@@ -174,8 +183,8 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
 
         size_t current_if_id = compiler->counters->if_statements++;
         push_to_if_stack(current_if_id, compiler);
-
-        evaluate_expression_x86_64(stmt->stmnt_if.condition, compiler, output, 1, DATA_TYPE_INT);
+        data_type* condition_type = stmt->stmnt_if.condition->result_type;
+        evaluate_expression_x86_64(stmt->stmnt_if.condition, compiler, output, 1, condition_type);
         // till now what is printed:
         //cmp rax, rbx
         //jne 
@@ -186,12 +195,12 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
         } else {
             write_to_buffer(".end_if_", 8, output, compiler);
         }
-        nums_to_str(current_if_id, num_len, output, compiler);
+        nums_to_str(current_if_id, output, compiler);
         write_to_buffer("\n", 1, output, compiler);
 
         // generate the code itself
-        if (stmt->stmnt_if.then->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.then, num_len, output, compiler);
-        else generate_statement_code(stmt->stmnt_if.then, num_len, output, compiler);
+        if (stmt->stmnt_if.then->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.then, output, compiler);
+        else generate_statement_code(stmt->stmnt_if.then, output, compiler);
 
         // now that we have finished the then block, we go to endif, then we write the logic for else
         int len0 = snprintf(buffer, sizeof(buffer), "jmp .end_if_%lu\n", current_if_id);
@@ -205,10 +214,10 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
 
             // .Lelse_3:\n
             if (stmt->stmnt_if.or_else->type == STMT_IF) { // else if case
-                generate_statement_code(stmt->stmnt_if.or_else, num_len, output, compiler);
+                generate_statement_code(stmt->stmnt_if.or_else, output, compiler);
             } else { // plain else case
-                if (stmt->stmnt_if.or_else->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.or_else, num_len, output, compiler);
-                else generate_statement_code(stmt->stmnt_if.or_else, num_len, output, compiler);
+                if (stmt->stmnt_if.or_else->type == STMT_BLOCK) generate_block_code(stmt->stmnt_if.or_else, output, compiler);
+                else generate_statement_code(stmt->stmnt_if.or_else, output, compiler);
                 // compiler->if_statements++;
             }
             
@@ -216,7 +225,7 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
 
         // now the end_if
         write_to_buffer(".end_if_", 8, output, compiler);
-        nums_to_str(peek_if_stack(compiler), num_len, output, compiler);
+        nums_to_str(peek_if_stack(compiler), output, compiler);
         write_to_buffer(":\n", 2, output, compiler);
         compiler->counters->if_statements++;
         pop_from_if_stack(compiler);
@@ -250,14 +259,14 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
         int len = snprintf(buffer, sizeof(buffer), "jmp .condition_while_%lu\n.while_loop_%lu:\n", counter, counter);
         write_to_buffer(buffer, len, output, compiler);
 
-        generate_block_code(stmt->stmnt_while.body, num_len, output, compiler);
+        generate_block_code(stmt->stmnt_while.body, output, compiler);
 
         pop_from_while_stack(compiler);
 
         int len0 = snprintf(buffer, sizeof(buffer), ".condition_while_%lu:\n", counter);
         write_to_buffer(buffer, len0, output, compiler);
-
-        evaluate_expression_x86_64(stmt->stmnt_while.condition, compiler, output, 2, DATA_TYPE_INT); 
+        
+        evaluate_expression_x86_64(stmt->stmnt_while.condition, compiler, output, 2, stmt->stmnt_while.condition->result_type); 
 
         int len1 = snprintf(buffer, sizeof(buffer), ".while_loop_%lu\n.end_while_loop_%lu:\n", counter, counter);
         write_to_buffer(buffer, len1, output, compiler);
@@ -268,25 +277,31 @@ static void generate_statement_code(statement* stmt, size_t* num_len, FILE* outp
         break;
     }  
 }
-
-void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output){
-    output = fopen("output.asm", "wb"); //clear file
-    size_t num_len = 0;
+ 
+void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output, char* output_name) {
+    printf("Generating assembly for output name: %s\n", output_name);
+    char output_filename[512];
+    snprintf(output_filename, sizeof(output_filename), "%s.asm", output_name);
+    output = fopen(output_filename, "wb"); //clear file if it exists, create if it doesn't
+    printf("CHECHPOINT 1\n");
     size_t i = 0;
     write_to_buffer("section .text\n\tglobal _start\n_start:\n", 37, output, compiler);
-    // will move to function handling later
+    printf("CHECHPOINT 2\n");
     write_to_buffer("push rbp\nmov rbp, rsp\nsub rsp, ", 31, output, compiler);
+    printf("CHECHPOINT 3\n");
     size_t glbl_scope_offset = compiler->symbol_table_stack->storage[0]->scope_offset;
-    nums_to_str(((glbl_scope_offset + 7) & ~7), &num_len, output, compiler);
-
+    printf("CHECHPOINT 4\n");
+    nums_to_str(((glbl_scope_offset + 7) & ~7), output, compiler);
+    printf("CHECHPOINT 5\n");
     write_to_buffer("\n", 1, output, compiler);
+    printf("CHECHPOINT 6\n");
     while (i < AST->node_count)
     {
+        printf("i enumeration: %lu\n", i);
         switch (AST->nodes[i]->type)    
         {
-        
         case NODE_STATEMENT:
-            generate_statement_code(AST->nodes[i]->stmnt, &num_len, output, compiler);
+            generate_statement_code(AST->nodes[i]->stmnt, output, compiler);
             break;
         case NODE_EXPRESSION:
             // This handles top-level expressions like "my_function();"
@@ -302,7 +317,7 @@ void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output){
     write_to_buffer("\n\n\n\n", 4, output, compiler);
     while (i < AST->function_node_count)
     {
-        generate_function_code(AST->function_nodes[i]->stmnt, &num_len, output, compiler);
+        generate_function_code(AST->function_nodes[i]->stmnt, output, compiler);
         i++;
     }
     

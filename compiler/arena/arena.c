@@ -1,5 +1,6 @@
 #include "utilities/utils.h"
 #include "error_handler/error_handler.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,6 +133,7 @@ Compiler* init_compiler_arenas(size_t file_length) {
     arenas->counters->end_ifs_capacity = 32;
     arenas->counters->end_ifs_current = 0;
     
+    arenas->return_context = false;
     
     return arenas;
 }

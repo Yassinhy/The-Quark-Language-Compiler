@@ -16,28 +16,37 @@ int main(int argc, char** argv) {
         printf("Usage: %s <file.ph> <architecture> <output program name>\n", argv[0]);
         return 1;
     }
-
+    printf("started reading file\n");
     //read file
     size_t* file_length = malloc(sizeof(size_t));
     char* source = readfile(argv[1], file_length);
+    printf("ended reading file\n");
 
+    printf("Started initializing compiler arenas\n");
     //initialize compiler arenas
     Compiler* compiler = init_compiler_arenas(*file_length);
     // tokenize
     size_t* token_count = malloc(sizeof(size_t));
     size_t* function_count = malloc(sizeof(size_t));
 
+    printf("Done initializing compiler arenas\n");
+
+    printf("Started tokenizing\n");
     tokenize(source, compiler, token_count, file_length, function_count);
     if (*token_count == 0) {
         panic(ERROR_INTERNAL, "ERROR: No tokens created! Check your tokenizer.", compiler);
     }
+    printf("Ended Tokenization\n");
 
+    printf("Started parser init\n");
     //create parser
     Parser* parser = make_parser(compiler);
     compiler->parser = parser;
     parser->tokens = (token*)compiler->token_arena->data;
     parser->token_count = *token_count;
+    printf("Ended Parser init\n");
 
+    printf("Started AST initialization\n");
     // Abstract Syntax Tree
     AST* ast = arena_alloc(compiler->statements_arena, sizeof(AST), compiler);
 
@@ -48,7 +57,9 @@ int main(int argc, char** argv) {
     ast->node_count = 0;
     ast->function_node_count = 0;
     ast->parser = parser;
+    printf("Done AST initialization\n");
 
+    printf("Started parsing\n");
     // First pass
     while (parser->current < (*token_count - 1)) {
         if (peek(parser, 0)->type == TOK_FN) {
@@ -58,7 +69,7 @@ int main(int argc, char** argv) {
             advance(parser);
         }
     }
-
+    printf("finished first pass\n");
     // reset parser
     compiler->parser->current = 0;
 
@@ -74,23 +85,28 @@ int main(int argc, char** argv) {
             advance(parser);
         }
     }
-
+    printf("Done parsing\n");
     if (ast->nodes == NULL) {
         panic(ERROR_INTERNAL, "ERROR: AST creation failed!", compiler);
     }
 
     // create output file
     FILE* output = fopen("output.asm", "wb");
+    if(!output) {
+        panic(ERROR_INTERNAL, "Failed to create output file", compiler);
+    }
 
     // generate code
     if (strncmp("x86_64", argv[2], 6) == 0) {
-        generate_assembly_x86_64 ((const AST*)ast, compiler, output);
+        printf("Start generating code\n");
+        generate_assembly_x86_64 ((const AST*)ast, compiler, output, argv[3]);
+        printf("Stop generating code\n");
         /*else if (strcasecmp("arm64", argv[2]) == 0) {
         generate_assembly_arm_64 ((const AST*)ast, compiler);
         }*/
     } else
     {
-        panic(ERROR_UNDEFINED, "undefined system architecture, currently supporting x86_64 and arm64 only", compiler);
+        panic(ERROR_UNDEFINED, "undefined system architecture, currently supporting x86_64 only", compiler);
     }
 
     // terminate program and free memory
@@ -115,6 +131,6 @@ int main(int argc, char** argv) {
     double time_spent = ((double)(end - start)) / CLOCKS_PER_SEC;
     
     printf("Code compiled in %.6f seconds\n", time_spent);
-    
+    printf("Compilation Successful !\n");
     return 0;
 }

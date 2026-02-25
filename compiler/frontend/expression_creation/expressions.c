@@ -4,6 +4,7 @@
 #include "symbol_table/symbol_table.h"
 #include "error_handler/error_handler.h"
 #include "frontend/parsing/parsing.h"
+#include <stdbool.h>
 #include <stdio.h>
 
 node* create_number_node(int value, Compiler* compiler)
@@ -15,11 +16,23 @@ node* create_number_node(int value, Compiler* compiler)
     number_node -> expr -> integer.value = value;
     // if(value < int max) int
     // else long
-    number_node -> expr -> result_type = DATA_TYPE_INT;
+    number_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!number_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Number expression result_type allocation failed", compiler);
+    }
+
+    number_node->expr->result_type->data_type_family = FAMILY_FLAT;
+    if (value <= 2147483647 && value >= -2147483648) {
+        number_node->expr->result_type->flat_type.flat_data_type = TOK_INT;
+    }
+    else if (value > 2147483647 || value < -2147483648)
+    {
+        number_node->expr->result_type->flat_type.flat_data_type = TOK_LONG;
+    }
     return number_node;
 }
 
-node* create_variable_node_dec(char* var_name, size_t length, variable_storage_type storage_type, normal_register reg_location, Data_type data_type, Compiler* compiler)
+node* create_variable_node_dec(char* var_name, size_t length, variable_storage_type storage_type, normal_register reg_location, data_type* data_type, Compiler* compiler)
 {
     node* var_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
     if(!var_node) return NULL;
@@ -33,7 +46,53 @@ node* create_variable_node_dec(char* var_name, size_t length, variable_storage_t
     var_node->expr->variable.data_type = data_type;
     var_node->expr->variable.node_in_table = add_var_to_current_scope(compiler, var_node->expr, storage_type, reg_location); // offset will be set later during code generation and size will be int for now (8 bytes)
     var_node->expr->result_type = data_type;
+    var_node->expr->variable.address_is_taken = false;
     return var_node;
+}
+
+node* create_address_node(node* operand, Compiler* compiler) {
+    if (operand->expr->type != EXPR_IDENTIFIER) panic(ERROR_LOGICAL, "Cannot pass '&' operator to a temporary value, must be passed on a stack or heap allocated variable", compiler);
+    
+    node* address_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
+    if(!address_node) return NULL;
+    address_node->type = NODE_EXPRESSION;
+    address_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
+    if(!address_node->expr) return NULL;
+
+    address_node->expr->type = EXPR_ADDRESS;
+    address_node->expr->address.operand = operand->expr;
+    address_node->expr->address.operand->variable.address_is_taken = true;
+
+    address_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!address_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Address expression result_type allocation failed", compiler);
+    }
+
+    address_node->expr->result_type->data_type_family = FAMILY_ADDRESS;
+    address_node->expr->result_type->general_data_type = DATA_TYPE_ADDRESS;
+    address_node->expr->result_type->address_type.base_type = operand->expr->result_type;
+    return address_node;   
+}
+
+node* create_deref_node(node* operand, Compiler* compiler) {
+    if (operand->expr->result_type->data_type_family != FAMILY_POINTER) panic(ERROR_LOGICAL, "Cannot dereference a non-pointer type", compiler);
+    
+    node* deref_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
+    if(!deref_node) return NULL;
+    deref_node->type = NODE_EXPRESSION;
+    deref_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
+    if(!deref_node->expr) return NULL;
+
+    deref_node->expr->type = EXPR_POINTER_DEREF;
+    deref_node->expr->address.operand = operand->expr;
+    
+    deref_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!deref_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Address expression result_type allocation failed", compiler);
+    }
+
+    deref_node->expr->result_type = operand->expr->result_type->address_type.base_type;
+    return deref_node;   
 }
 
 node* create_unary_node(TokenType op, node* operand, Compiler* compiler)
@@ -46,6 +105,11 @@ node* create_unary_node(TokenType op, node* operand, Compiler* compiler)
     unary_node->expr->type = EXPR_UNARY;
     unary_node->expr->unary.op = op;
     unary_node->expr->unary.operand = operand->expr;
+
+    unary_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!unary_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Unary expression result_type allocation failed", compiler);
+    }
     unary_node->expr->result_type = operand->expr->result_type;
     return unary_node;
 }
@@ -73,51 +137,61 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         panic(ERROR_MEMORY_ALLOCATION, "Binary expression allocation failed", compiler);
     }
 
-    if (left->expr->result_type == DATA_TYPE_DOUBLE || right_node->expr->result_type == DATA_TYPE_DOUBLE) {
-        if ((left->expr->result_type == DATA_TYPE_DOUBLE || left->expr->result_type == DATA_TYPE_FLOAT) && (right_node->expr->result_type == DATA_TYPE_DOUBLE || right_node->expr->result_type == DATA_TYPE_FLOAT))
-        {
-            bin_node->expr->result_type = DATA_TYPE_DOUBLE;
+    bin_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!bin_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Binary expression result_type allocation failed", compiler);
+    }
+    
+    if (left->expr->result_type->data_type_family == FAMILY_FLAT && right_node->expr->result_type->data_type_family == FAMILY_FLAT){
+        if (left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE) {
+            if ((left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || left->expr->result_type->general_data_type == DATA_TYPE_FLOAT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT))
+            {
+                bin_node->expr->result_type->general_data_type = DATA_TYPE_DOUBLE;
+                bin_node->expr->result_type->flat_type.flat_data_type = TOK_DOUBLE;
+            }
+            else
+            {
+                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is double and the other is not", compiler);
+            }
         }
-        else
-        {
-            panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is double and the other is not", compiler);
+        else if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT) {
+            if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT && right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT)
+            {
+                bin_node->expr->result_type->general_data_type = DATA_TYPE_FLOAT;
+                bin_node->expr->result_type->flat_type.flat_data_type = TOK_FLOAT;
+            }
+            else
+            {
+                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is float and the other is not", compiler);
+            }
+            
+        }
+        else if (left->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_LONG) {
+            if ((left->expr->result_type->general_data_type == DATA_TYPE_LONG || left->expr->result_type->general_data_type == DATA_TYPE_INT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_INT))
+            {
+                bin_node->expr->result_type->general_data_type = DATA_TYPE_LONG;
+                bin_node->expr->result_type->flat_type.flat_data_type = TOK_LONG;
+            }
+            else
+            {
+                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
+            }
+        }
+        else if (left->expr->result_type->general_data_type == DATA_TYPE_INT || right_node->expr->result_type->general_data_type == DATA_TYPE_INT) {
+            if (left->expr->result_type->general_data_type == DATA_TYPE_INT && right_node->expr->result_type->general_data_type == DATA_TYPE_INT)
+            {
+                bin_node->expr->result_type->general_data_type = DATA_TYPE_INT;
+                bin_node->expr->result_type->flat_type.flat_data_type = TOK_INT;
+            }
+            else
+            {
+                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
+            }
+        }
+        else {
+            panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
         }
     }
-    else if (left->expr->result_type == DATA_TYPE_FLOAT || right_node->expr->result_type == DATA_TYPE_FLOAT) {
-        if (left->expr->result_type == DATA_TYPE_FLOAT && right_node->expr->result_type == DATA_TYPE_FLOAT)
-        {
-            bin_node->expr->result_type = DATA_TYPE_FLOAT;
-        }
-        else
-        {
-            panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is float and the other is not", compiler);
-        }
-        
-    }
-    else if (left->expr->result_type == DATA_TYPE_LONG || right_node->expr->result_type == DATA_TYPE_LONG) {
-        if ((left->expr->result_type == DATA_TYPE_LONG || left->expr->result_type == DATA_TYPE_INT) && (right_node->expr->result_type == DATA_TYPE_LONG || right_node->expr->result_type == DATA_TYPE_INT))
-        {
-            bin_node->expr->result_type = DATA_TYPE_LONG;
-        }
-        else
-        {
-            panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
-        }
-    }
-    else if (left->expr->result_type == DATA_TYPE_INT || right_node->expr->result_type == DATA_TYPE_INT) {
-        if (left->expr->result_type == DATA_TYPE_INT && right_node->expr->result_type == DATA_TYPE_INT)
-        {
-            bin_node->expr->result_type = DATA_TYPE_INT;
-        }
-        else
-        {
-            panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
-        }
-    }
-    else {
-        panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
-    }
-
     bin_node->expr->type = EXPR_BINARY;
     bin_node->expr->binary.left = left->expr;
     bin_node->expr->binary.right = right_node->expr;
@@ -191,7 +265,7 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
 
     for (size_t i = 0; i < param_count; i++)
     {
-        if(arguments[i].result_type != func_dec_node->parameters[i].variable.data_type) panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
+        if(arguments[i].result_type->general_data_type != func_dec_node->parameters[i].variable.data_type->general_data_type) panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
     }
     
 
@@ -205,6 +279,11 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
     func_call_node->expr->func_call.name_length = name_length;
     func_call_node->expr->func_call.arguments = arguments;
     func_call_node->expr->func_call.parameter_count = param_count;
+
+    func_call_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!func_call_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Function call expression result_type allocation failed", compiler);
+    }
     func_call_node->expr->result_type = func_dec_node->return_type;
     return func_call_node;
 
@@ -235,6 +314,11 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     var_node->expr->variable.node_in_table = found_symbol;
     
     var_node->expr->variable.data_type = found_symbol->data_type;
+
+    var_node->expr->result_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    if (!var_node->expr->result_type) {
+        panic(ERROR_MEMORY_ALLOCATION, "Variable expression result_type allocation failed", compiler);
+    }
     var_node->expr->result_type = found_symbol->data_type;
     
     

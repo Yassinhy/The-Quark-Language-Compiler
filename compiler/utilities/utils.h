@@ -2,6 +2,7 @@
 #define UTILS_H
 #include "includes.h"
 #include "definetions.h"
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef enum
@@ -37,7 +38,7 @@ typedef enum
     TOK_BITNOT, // 17 - ~
     TOK_NEGATE, // 18 - - (unary)
 
-    // Primary expressions (highest)
+    // Primary expressions
     TOK_NUMBER,     // 19
     TOK_STRING,     // 20
     TOK_IDENTIFIER, // 21
@@ -72,31 +73,27 @@ typedef enum
     TOK_BREAK,    // 44 - break
     TOK_CONTINUE, // 45 - continue
 
-    // Bitwise operators (medium precedence)
-    TOK_BIT_OR,      // 46 - |
+    // Bitwise operators
+    TOK_BIT_OR,      // 46 - ||
     TOK_BIT_AND,     // 47 - &
     TOK_BIT_XOR,     // 48 - ^
     TOK_SHIFT_LEFT,  // 49 - <<
     TOK_SHIFT_RIGHT, // 50 - >>
 
     // TOKEN OF DATA TYPES
-    TOK_DATATYPE, // 51 - data type like :int, :bool, :string
-    TOK_VOID,     // 52 - void data type
+    TOK_INT,      // 51 - int data type
+    TOK_FLOAT,    // 52 - float data type
+    TOK_DOUBLE,   // 53 - double data type
+    TOK_CHAR,     // 54 - char data type
+    TOK_LONG,     // 55 - long data type
+    TOK_BOOL,     // 56 - bool data type
+    TOK_UNDEFINED, // 57 - undefined data type (for error handling)
+    TOK_VOID,     // 58 - void data type
+
+    TOK_POINTER_DEREF, // 59 - .*
 } TokenType;
 
-typedef enum
-{
-    DATA_TYPE_INT = 0,
-    DATA_TYPE_FLOAT = 1,
-    DATA_TYPE_DOUBLE = 2,
-    DATA_TYPE_CHAR = 3,
-    DATA_TYPE_LONG = 4,
-    DATA_TYPE_BOOL = 5,
-    DATA_TYPE_STRING = 6,
-    DATA_TYPE_VOID = 7,
-    DATA_TYPE_UNDEFINED = 8,
-    DATA_TYPE_POINTER = 9,
-} Data_type;
+
 
 // Precedense values
 typedef enum
@@ -128,7 +125,61 @@ typedef enum
     ERROR_RUNTIME,
     ERROR_INTERNAL,
     ERROR_UNDEFINED,
+    ERROR_LOGICAL
 } error_code;
+
+typedef enum {
+    FAMILY_FLAT,
+    FAMILY_POINTER,
+    FAMILY_ARRAY,
+    FAMILY_ADDRESS,
+} data_type_family;
+
+typedef enum {
+    DATA_TYPE_INT,
+    DATA_TYPE_FLOAT,
+    DATA_TYPE_DOUBLE,
+    DATA_TYPE_CHAR,
+    DATA_TYPE_LONG,
+    DATA_TYPE_BOOL,
+    DATA_TYPE_UNDEFINED, // for error handling
+    DATA_TYPE_VOID,
+
+
+    DATA_TYPE_POINTER,
+    DATA_TYPE_ADDRESS,
+    DATA_TYPE_ARRAY,
+} Data_type;
+
+
+typedef struct data_type
+{
+    data_type_family data_type_family;
+    Data_type general_data_type; // general info on what the data type is
+    union{
+        struct
+        {
+            TokenType flat_data_type;
+        } flat_type;
+
+        struct array_type
+        {
+            size_t array_length;
+            TokenType array_base_type;
+            struct data_type* nested_array; // NULL if non-recursive or base array
+        } array_type;
+
+        struct pointer_type
+        {
+            struct data_type* base_type;  // What this pointer points to (int, char, another pointer, etc.)
+        } pointer_type;
+
+        struct address_type
+        {
+            struct data_type* base_type;  // What this address points to (int, char, another pointer, etc.)
+        } address_type;
+    };
+} data_type;
 
 typedef struct token
 {
@@ -142,7 +193,6 @@ typedef struct token
             size_t length;
         } str_value;
         int int_value;
-        Data_type data_type;
     };
 } token;
 
@@ -164,7 +214,9 @@ typedef enum
     EXPR_BINARY,
     EXPR_UNARY,
     EXPR_IDENTIFIER,
-    EXPR_FUNCTION_CALL
+    EXPR_FUNCTION_CALL,
+    EXPR_ADDRESS,
+    EXPR_POINTER_DEREF,
 } ExpressionType;
 
 typedef enum
@@ -198,7 +250,7 @@ typedef struct symbol_node
     char *var_name;
     uint32_t var_name_size;
     variable_storage_type where_it_is_stored;
-    Data_type data_type;
+    data_type* data_type;
     struct symbol_node *next;
     union
     {
@@ -212,13 +264,13 @@ typedef struct symbol_node
 typedef struct expression
 {
     ExpressionType type;   // the type of the expression
-    Data_type result_type; // the resulting data type of the expression
+    data_type* result_type; // the resulting data type of the expression
 
     union
     {
         struct // number
         {
-            int value;
+            long long value;
         } integer;
 
         struct // string
@@ -238,7 +290,8 @@ typedef struct expression
             size_t length;
             symbol_node *node_in_table;
             size_t hash;
-            Data_type data_type;
+            data_type* data_type;
+            bool address_is_taken;
         } variable;
 
         // binary expressions (x + y)
@@ -265,6 +318,18 @@ typedef struct expression
             struct expression *arguments;
             size_t parameter_count;
         } func_call;
+
+        // address (&var)
+        struct
+        {
+            struct expression* operand;
+        } address;
+
+        // pointer dereference (ptr.*)
+        struct
+        {
+            struct expression* operand;
+        } dereference;
     };
 
 } expression;
@@ -298,7 +363,7 @@ typedef struct function_node
     size_t param_count;
     struct statement *code_block;
     struct function_node *next;
-    Data_type return_type;
+    data_type* return_type;
 } function_node;
 
 typedef struct symbol_table
@@ -306,7 +371,7 @@ typedef struct symbol_table
     symbol_node **symbol_map;
     struct symbol_table *parent_scope; // for fast recursion to parent scope
 
-    Data_type scope_data_type; // for stuff to know what is the data type it should return
+    data_type* scope_data_type; // for stuff to know what is the data type it should return
 
     size_t scope_offset; // for subtracting from rsp
     size_t param_offset; // for parameters
@@ -395,7 +460,7 @@ typedef struct statement
         struct
         {
             expression *value; // NULL for "return;"
-            Data_type return_data_type;
+            data_type* return_data_type;
         } stmnt_return;
 
         struct
@@ -493,10 +558,15 @@ typedef struct
 
     counters *counters;
 
+    // for return context
+    bool return_context;
+
 } Compiler;
 
 // Arrays:
 extern const int Data_type_sizes[];
+extern const int Data_type_sizes_from_data_types[];
+extern const int Data_is_signed[];
 
 extern const char* reg[];
 

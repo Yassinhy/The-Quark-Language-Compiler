@@ -4,6 +4,16 @@
 #include "error_handler/error_handler.h"
 #include <stddef.h>
 
+size_t get_data_type_size(data_type* type, Compiler* compiler) {
+    switch (type->data_type_family) {
+        case FAMILY_FLAT:
+            return Data_type_sizes[type->flat_type.flat_data_type];
+        case FAMILY_POINTER:
+            return 8; // A pointer is 8 bytes on a 64-bit system
+        default:
+            panic(ERROR_INTERNAL, "Unkown DATA TYPE, trying to get its size", compiler);
+    }
+}
 
 size_t hash_function(const char* var_name, size_t var_name_length)
 {
@@ -21,7 +31,7 @@ symbol_table* peek_symbol_stack(Compiler* compiler) {
     return current_table;
 }
 
-void enter_new_scope(Compiler* compiler, Data_type scope_data_type) {
+void enter_new_scope(Compiler* compiler, data_type* scope_data_type) {
     if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
     if (compiler->symbol_table_stack->current_size + 1 >= compiler->symbol_table_stack->capacity) {
         compiler->symbol_table_stack->storage = realloc(compiler->symbol_table_stack->storage, compiler->symbol_table_stack->capacity * 2 * sizeof(symbol_table*));
@@ -73,15 +83,15 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
     switch (storage_type)
     {
     case STORE_IN_STACK:
-        peek_symbol_stack(compiler)->scope_offset += Data_type_sizes[variable->variable.data_type];
+        peek_symbol_stack(compiler)->scope_offset += get_data_type_size(variable->variable.data_type, compiler);
         (*new_symbol)->offset = peek_symbol_stack(compiler)->scope_offset;
         break;
     case STORE_IN_REGISTER:
         (*new_symbol)->register_location = reg_location;
         break;
     case STORE_AS_PARAM:
-        peek_symbol_stack(compiler)->param_offset += Data_type_sizes[variable->variable.data_type];
-        (*new_symbol)->param_offset = 8 + peek_symbol_stack(compiler)->scope_offset; // 8 for the return pointer
+        peek_symbol_stack(compiler)->param_offset += get_data_type_size(variable->variable.data_type, compiler);
+        (*new_symbol)->param_offset = 8 + peek_symbol_stack(compiler)->param_offset; // 8 for the return pointer
         break;
     case STORE_IN_FLOAT_REGISTER:
         //TO DO     

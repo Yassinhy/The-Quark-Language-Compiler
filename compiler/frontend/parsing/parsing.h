@@ -31,6 +31,6 @@ node* parse_while_node (Compiler* compiler, Parser* parser);
 
 node* parse_function_node(Compiler* compiler, Parser* parser);
 node* skip_function_decleration(Compiler* compiler, Parser* parser);
-node* parse_code_block(Compiler* compiler, Parser* parser, bool function_block, expression* params, size_t param_count , Data_type function_return_type);
-node* parse_code_block2(Compiler* compiler, Parser* parser, expression* params, size_t param_count , Data_type function_return_type, size_t* has_return);
+node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, expression *params, size_t param_count, data_type* function_return_type);
+node* parse_code_block2(Compiler* compiler, Parser* parser, expression* params, size_t param_count , data_type* function_return_type, size_t* has_return);
 #endif

@@ -1,17 +1,41 @@
 #include "utilities/utils.h"
 
 const int Data_type_sizes[] = {
+    [TOK_INT] = 4,
+    [TOK_FLOAT] = 4,
+    [TOK_DOUBLE] = 8,
+    [TOK_CHAR] = 1,
+    [TOK_LONG] = 8,
+    [TOK_BOOL] = 1,
+    [TOK_STRING] = 8,
+    [TOK_VOID] = 0,
+    [TOK_UNDEFINED] = 0,
+};
+
+const int Data_type_sizes_from_data_types[] = {
     [DATA_TYPE_INT] = 4,
     [DATA_TYPE_FLOAT] = 4,
     [DATA_TYPE_DOUBLE] = 8,
     [DATA_TYPE_CHAR] = 1,
     [DATA_TYPE_LONG] = 8,
     [DATA_TYPE_BOOL] = 1,
-    [DATA_TYPE_STRING] = 8,
     [DATA_TYPE_VOID] = 0,
     [DATA_TYPE_UNDEFINED] = 0,
     [DATA_TYPE_POINTER] = 8,
 };
+
+const int Data_is_signed[] = {
+    [DATA_TYPE_INT] = 1,
+    [DATA_TYPE_FLOAT] = 1,
+    [DATA_TYPE_DOUBLE] = 1,
+    [DATA_TYPE_CHAR] = 0,
+    [DATA_TYPE_LONG] = 1,
+    [DATA_TYPE_BOOL] = 0,
+    [DATA_TYPE_VOID] = 0,
+    [DATA_TYPE_UNDEFINED] = 0,
+    [DATA_TYPE_POINTER] = 0,
+};
+
 
 const Precedence presedences[] = {
     // Control tokens - stops parsing
@@ -319,8 +343,20 @@ void print_token(TokenType type) {
             break;
 
         // Data types
-        case TOK_DATATYPE:
-            printf("TOK_DATATYPE\n");
+        case TOK_INT:
+            printf("TOK_INT\n");
+            break;
+        case TOK_FLOAT:
+            printf("TOK_FLOAT\n");
+            break;
+        case TOK_DOUBLE:
+            printf("TOK_DOUBLE\n");
+            break;
+        case TOK_CHAR:
+            printf("TOK_CHAR\n");
+            break;
+        case TOK_LONG:
+            printf("TOK_LONG\n");
             break;
         case TOK_VOID:
             printf("TOK_VOID\n");

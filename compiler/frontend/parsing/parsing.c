@@ -50,8 +50,177 @@ bool match(Parser *parser, TokenType type)
     return current_token && current_token->type == type;
 }
 
+data_type* create_data_type_from_token(Data_type type, Compiler *compiler)
+{
+    data_type* result = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    switch (type)
+    {
+    case DATA_TYPE_INT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_INT;
+        result->general_data_type = DATA_TYPE_INT;
+        break;
+    
+    case DATA_TYPE_LONG:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_LONG;
+        result->general_data_type = DATA_TYPE_LONG;
+        break;
+
+    default:
+        panic(ERROR_SYNTAX, "Unexpected data type token", compiler);
+    }
+    return result;
+}
+
+data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
+    printf("STARTED PARSING DATA_TYPE RECURSIVE: ");
+
+    token *current_token = peek(parser, 0);
+    if (!current_token)
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+
+    data_type* result = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    
+    switch (current_token->type)
+    {
+    case TOK_INT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_INT;
+        result->general_data_type = DATA_TYPE_INT;
+        advance(parser); // consume the data type token
+        break;
+    
+    case TOK_LONG:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_LONG;
+        result->general_data_type = DATA_TYPE_LONG;
+        advance(parser); // consume the data type token
+        break;
+    
+    case TOK_MUL: // for pointer ( *int)
+        advance(parser); // consume *
+        result->data_type_family = FAMILY_POINTER;
+        result->pointer_type.base_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+        result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
+        result->general_data_type = DATA_TYPE_POINTER;
+        result->pointer_type.base_type = parse_data_type_recursive(parser, compiler);
+        break;
+        
+    default:
+        panic(ERROR_SYNTAX, "Expected a data type", compiler);
+    }
+    return result;
+}
+
+data_type* parse_data_type(Parser *parser, Compiler *compiler)
+{
+    printf("STARTED PARSING DATA_TYPE: ");
+    print_token(peek(parser, 0)->type);
+    if (!peek(parser, 0))
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+    print_token(peek(parser, 0)->type);
+    if(peek(parser, 0)->type != TOK_COLON) {
+        panic(ERROR_INTERNAL, "Expected a colon ':' after variable name", compiler);
+    }
+    advance(parser); // consume ':'
+    token *current_token = peek(parser, 0);
+    if (!current_token)
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+
+    data_type* result = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    
+    switch (current_token->type)
+    {
+    case TOK_INT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_INT;
+        result->general_data_type = DATA_TYPE_INT;
+        advance(parser); // consume the data type token
+        break;
+    
+    case TOK_LONG:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_LONG;
+        result->general_data_type = DATA_TYPE_LONG;
+        advance(parser); // consume the data type token
+        break;
+    
+    case TOK_MUL: // for pointer ( *int)
+        advance(parser); // consume *
+        result->data_type_family = FAMILY_POINTER;
+        result->pointer_type.base_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+        result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
+        result->general_data_type = DATA_TYPE_POINTER;
+        result->pointer_type.base_type = parse_data_type_recursive(parser, compiler);
+        break;
+        
+    default:
+        panic(ERROR_SYNTAX, "Expected a data type", compiler);
+    }
+    return result;
+}
+
+
+data_type* parse_param_data_type(Parser *parser, Compiler *compiler, size_t* param_offset)
+{
+    if (!peek(parser, *param_offset))
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+    if(peek(parser, *param_offset)->type != TOK_COLON) {
+        panic(ERROR_SYNTAX, "Expected a colon ':' after variable name", compiler);
+    }
+    (*param_offset)++; // consume ':'
+    token *current_token = peek(parser, *param_offset);
+    if (!current_token)
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+
+    data_type* result = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    
+    switch (current_token->type)
+    {
+    case TOK_INT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_INT;
+        result->general_data_type = DATA_TYPE_INT;
+        (*param_offset)++; // consume the data type token
+        break;
+    
+    case TOK_LONG:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_LONG;
+        result->general_data_type = DATA_TYPE_LONG;
+        (*param_offset)++; // consume the data type token
+        break;
+    
+    case TOK_MUL: // for pointer ( *int)
+        (*param_offset)++; // consume *
+        result->data_type_family = FAMILY_POINTER;
+        result->pointer_type.base_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+        result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
+        result->general_data_type = DATA_TYPE_POINTER;
+        result->pointer_type.base_type = parse_param_data_type(parser, compiler, param_offset);
+        break;
+        
+    default:
+        panic(ERROR_SYNTAX, "Expected a data type", compiler);
+    }
+    return result;
+}
+
+
 node* parse_statement(Compiler *compiler, Parser *parser)
 {
+    print_token(peek(parser, 0)->type);
     switch (peek(parser, 0)->type)
     {
     case TOK_EXIT:
@@ -108,7 +277,7 @@ node *parse_exit_node(Compiler *compiler, Parser *parser)
     exit_node->stmnt = arena_alloc(compiler->statements_arena, sizeof(statement), compiler);
     exit_node->stmnt->type = STMT_EXIT;
     exit_node->stmnt->stmnt_exit.exit_code = parse_expression(parser, presedences[TOK_EXIT], true, compiler)->expr;
-
+    exit_node->stmnt->stmnt_exit.exit_code->result_type = create_data_type_from_token(DATA_TYPE_INT, compiler);
     if (peek(parser, 0)->type != TOK_SEMICOLON)
         panic(ERROR_SYNTAX, "Expected semicolumn ';'", compiler);
     advance(parser); // consume ;
@@ -159,51 +328,47 @@ node* parse_return_node(Compiler *compiler, Parser *parser)
 
 node *parse_let_node(Compiler *compiler, Parser *parser)
 {
+    printf("STARTED PARSING LET TOKEN\n");
     node *let_node = (node *)arena_alloc(compiler->statements_arena, sizeof(node), compiler);
     if (!let_node)
         panic(ERROR_MEMORY_ALLOCATION, "Exit node allocation failed", compiler);
 
     let_node->type = NODE_STATEMENT;
     advance(parser); // consume let
-
     let_node->stmnt = arena_alloc(compiler->statements_arena, sizeof(statement), compiler);
     if (!let_node->stmnt) panic(ERROR_MEMORY_ALLOCATION, "Exit node statement allocation failed", compiler);
 
     let_node->stmnt->type = STMT_LET;
-
     token *identifier_token = peek(parser, 0);
 
     let_node->stmnt->stmnt_let.name = identifier_token->str_value.starting_value;
     let_node->stmnt->stmnt_let.name_length = identifier_token->str_value.length;
-
-
     // we need this info: add_var_to_current_scope(expression* variable, variable_storage_type storage_type, normal_register reg_location)
     //  and this info:   node* create_variable_node_dec(string var_name ✅, size_t length ✅ , variable_storage_type storage_type ✅ , normal_register reg_location ✅ , Data_type data_type)
     let_node->stmnt->stmnt_let.hash = hash_function(peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length);
     advance(parser); // consume identifier
+    print_token(peek(parser, 0)->type);
+    data_type *data_type_token = parse_data_type(parser, compiler); // consume data type
+    printf("CODE BLOCK 4\n");
 
-
-    token *data_type_token = advance(parser); // consume data type
-
-    if (data_type_token->type != TOK_DATATYPE)
-        panic(ERROR_ARGUMENT_COUNT, "undefined type", compiler);
-
-
-    create_variable_node_dec(identifier_token->str_value.starting_value, identifier_token->str_value.length, STORE_IN_STACK, 0, data_type_token->data_type, compiler);
+    create_variable_node_dec(identifier_token->str_value.starting_value, identifier_token->str_value.length, STORE_IN_STACK, 0, data_type_token, compiler);
 
 
     token *t = advance(parser); // consume equal
 
-
+    printf("CODE BLOCK 5\n");
     if (t->type != TOK_EQUAL)
     {
-        panic(ERROR_SYNTAX, "usage: let var = value;", compiler);
+        panic(ERROR_SYNTAX, "usage: let var: type = value;", compiler);
     }
 
-
+    printf("PARSING EXPRESSION\n");
     let_node->stmnt->stmnt_let.value = parse_expression(parser, presedences[TOK_EQUAL], true, compiler)->expr;
+    printf("DONE PARSING EXPRESSION\n");
 
+    printf("CODE BLOCK 6\n");
     advance(parser); // consume ;
+    printf("DONE PARSING LET TOKEN\n\n\n");
     return let_node;
 }
 
@@ -297,7 +462,7 @@ node *parse_if_node(Compiler *compiler, Parser *parser)
     *has_return = 0;
 
     if (peek(parser, 0)->type == TOK_LBRACE){
-    if_node->stmnt->stmnt_if.then = parse_code_block2(compiler, parser, NULL, 0, 0, has_return)->stmnt; // now finished } // if it had a return value, then has_return will be 1
+    if_node->stmnt->stmnt_if.then = parse_code_block2(compiler, parser, NULL, 0, peek_symbol_stack(compiler)->scope_data_type, has_return)->stmnt; // now finished } // if it had a return value, then has_return will be 1
     }
     else {
         if_node->stmnt->stmnt_if.then = parse_statement(compiler, parser)->stmnt;
@@ -349,7 +514,7 @@ node *parse_elseif_node(Compiler *compiler, Parser *parser, size_t* has_return)
 
 
     if (peek(parser, 0)->type == TOK_LBRACE){
-    if_node->stmnt->stmnt_if.then = parse_code_block2(compiler, parser, NULL, 0, 0, has_return)->stmnt; // now finished } // if it had a return value, then has_return will be 1
+    if_node->stmnt->stmnt_if.then = parse_code_block2(compiler, parser, NULL, 0, peek_symbol_stack(compiler)->scope_data_type, has_return)->stmnt; // now finished } // if it had a return value, then has_return will be 1
     }
     else {
         if_node->stmnt->stmnt_if.then = parse_statement(compiler, parser)->stmnt;
@@ -396,7 +561,7 @@ node *parse_else_node(Compiler *compiler, Parser *parser, size_t* has_return)
     else if (peek(parser, 0)->type == TOK_LBRACE) // else {}
     {
         if (peek(parser, 0)->type == TOK_LBRACE){
-            return parse_code_block2(compiler, parser, NULL, 0, 0, has_return); // now finished } // if it had a return value, then has_return will be 1
+            return parse_code_block2(compiler, parser, NULL, 0, peek_symbol_stack(compiler)->scope_data_type, has_return); // now finished } // if it had a return value, then has_return will be 1
         }
         else {
             return parse_statement(compiler, parser);
@@ -416,7 +581,7 @@ node* skip_function_decleration(Compiler* compiler, Parser* parser) {
     advance(parser); // consume (
     while (peek(parser, 0)->type != TOK_RPAREN) advance(parser); // consume parameters and return type
     advance(parser); // consume )
-    advance(parser); // consume :datatype
+    parse_data_type(parser, compiler); // consume :datatype
     advance(parser); // consume {
     size_t stack = 0;
     while (true) {
@@ -443,6 +608,7 @@ node* skip_function_decleration(Compiler* compiler, Parser* parser) {
     print_token(peek(parser, 0)->type);
     return NULL;
 }
+
 
 
 node* parse_function_node(Compiler* compiler, Parser* parser)
@@ -481,7 +647,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     uint32_t param_count = 0;
     // split to case void and case parameters
     if (peek(parser, 0)->type != TOK_LPAREN)
-        panic(ERROR_SYNTAX, "fn ( parameters ) { code }\n   ~\n", compiler);
+        panic(ERROR_SYNTAX, "fn function_name ( parameters ) { code }\n   ~\n", compiler);
     advance(parser); // consume (
     if (peek(parser, 0)->type == TOK_VOID && peek(parser, 1)->type == TOK_RPAREN)
     {
@@ -493,9 +659,11 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     else
     {
         // find number of parameters and check syntax
-        uint32_t tmp = 0;
+        size_t tmp = 0;
+        printf("STARTED FIRST LOOKUP LOOP\n");
         while (true)
         {
+
             // check if dev didn't close the paren
             if (peek(parser, tmp)->type == TOK_EOF)
                 panic(ERROR_SYNTAX, "fn function_name (parameters')'\n                             ~\n", compiler);
@@ -503,9 +671,9 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             if (peek(parser, tmp)->type != TOK_IDENTIFIER)
                 panic(ERROR_SYNTAX, "function parameter name not specified", compiler);
             tmp++;
-            if (peek(parser, tmp)->type != TOK_DATATYPE)
-                panic(ERROR_SYNTAX, "function parameter data type not specified", compiler);
-            tmp++;
+            print_token(peek(parser, tmp)->type);
+            parse_param_data_type(parser, compiler, &tmp); // check if data type is correct, we will parse it again later, this is just for syntax checking and if incorrect it will throw a panic
+            
             param_count++;
             if (peek(parser, tmp)->type == TOK_COMMA)
                 tmp++;
@@ -514,7 +682,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             else
                 panic(ERROR_SYNTAX, "after parameter either ')' or ',' only", compiler);
         }
-
+        printf("PASSED FIRST LOOKUP LOOP\n");
         // populate function node info
         func_stmt->stmnt->stmnt_function_declaration.function_node->param_count = param_count;
         func_stmt->stmnt->stmnt_function_declaration.function_node->parameters = arena_alloc(compiler->symbol_arena, sizeof(expression) * param_count, compiler);
@@ -529,16 +697,13 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.name = name->str_value.starting_value;
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.length = name->str_value.length;
             func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.hash = hash_function(name->str_value.starting_value, name->str_value.length);
-            token *data_type = advance(parser); // consume param data type
 
-            func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.data_type = data_type->data_type;
+            func_stmt->stmnt->stmnt_function_declaration.function_node->parameters[i].variable.data_type = parse_data_type(parser, compiler);
             advance(parser); // consume , or )  it doesn't rly matter
         }
     }
     // now we are at the return type
-    if (peek(parser, 0)->type != TOK_DATATYPE)
-        panic(ERROR_SYNTAX, "expected return value data type", compiler);
-    func_stmt->stmnt->stmnt_function_declaration.function_node->return_type = advance(parser)->data_type;
+    func_stmt->stmnt->stmnt_function_declaration.function_node->return_type = parse_data_type(parser, compiler);
     // consumed return type
     // now at {
     
@@ -550,7 +715,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     return func_stmt;
 }
 
-node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, expression *params, size_t param_count, Data_type function_return_type)
+node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, expression *params, size_t param_count, data_type* function_return_type)
 {
     // for function blocks, not a function: 0 a function but no return type: 1 a function with a return type: 2
     if (advance(parser)->type != TOK_LBRACE)
@@ -620,18 +785,30 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
     // if the thing has a return value
     int has_ret = 0;
 
-    if (param_count <= 6)
+    if (param_count < 6)
     {
         for (size_t i = 0; i < param_count; i++)
         {
-            add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
+            if ((params[i]).variable.address_is_taken) {
+                add_var_to_current_scope(compiler, &(params[i]), STORE_AS_PARAM, 0);
+            }
+            else{
+                add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
+            }
         }
     }
     else
     {
         for (int i = 0; i < 6; i++)
         {
-            add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
+            if ((params[i]).variable.address_is_taken) {
+                add_var_to_current_scope(compiler, &(params[i]), STORE_AS_PARAM, 0);
+                i--;
+                continue;
+            }
+            else{
+                add_var_to_current_scope(compiler, &(params[i]), STORE_IN_REGISTER, registers[i]);
+            }
         }
         for (size_t i = param_count - 1; i >= 6; i--)
         {
@@ -689,8 +866,8 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
             if (statement && statement->stmnt)
             {
                 
-                Data_type expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
-                if (statement->stmnt->stmnt_return.return_data_type != expected_return_type)
+                data_type* expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
+                if (statement->stmnt->stmnt_return.return_data_type->general_data_type != expected_return_type->general_data_type)
                 {
                     panic(ERROR_TYPE_MISMATCH, "Incompatible return type of output with current scope", compiler);
                 }
@@ -724,7 +901,7 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
     return block_node;
 }
 
-node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, size_t param_count, Data_type function_return_type, size_t* path_exahustion)
+node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, size_t param_count, data_type* function_return_type, size_t* path_exahustion)
 {
     // for function blocks, not a function: 0 a function but no return type: 1 a function with a return type: 2
     if (advance(parser)->type != TOK_LBRACE) panic(ERROR_SYNTAX, "Must start code block using '{'", compiler);
@@ -795,7 +972,7 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
     // if the thing has a return value
     int has_ret = 0;
 
-    Data_type return_type = DATA_TYPE_UNDEFINED;
+    data_type* return_type = NULL;
 
     if (param_count <= 6)
     {
@@ -866,8 +1043,8 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
             {
                 return_type = statement->stmnt->stmnt_return.return_data_type;
                 
-                Data_type expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
-                if (return_type != expected_return_type)
+                data_type* expected_return_type = peek_symbol_stack(compiler)->scope_data_type;
+                if (return_type->general_data_type != expected_return_type->general_data_type)
                 {
                     panic(ERROR_TYPE_MISMATCH, "Incompatible return type of output with current scope", compiler);
                 }
@@ -899,8 +1076,9 @@ node *parse_code_block2(Compiler *compiler, Parser *parser, expression *params, 
 // 5 + 2 * 3 + x
 node *parse_expression(Parser *parser, int prev_presedence, bool constant_foldable, Compiler *compiler)
 {
-    constant_foldable = true;
-    node *left = parse_prefix(parser, constant_foldable, compiler); // after that the parser->current will be at the operator after the number/prefix token(s)
+    node *left = parse_prefix(parser, constant_foldable, compiler);
+    if (!left) panic(ERROR_SYNTAX, "Expected expression", compiler);
+    
     TokenType curr_opperator = peek(parser, 0)->type;
     int curr_presedence = presedences[curr_opperator];
 
@@ -924,8 +1102,8 @@ node *parse_expression(Parser *parser, int prev_presedence, bool constant_foldab
 node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
 {
     token *current_token = peek(parser, 0);
-    if (!current_token)
-        return NULL;
+    if (!current_token)  return NULL;
+    print_token(current_token->type);
     switch (current_token->type)
     {
     case TOK_NUMBER:
@@ -983,9 +1161,26 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                 }
                 return create_func_call_node(current_token->str_value.starting_value, current_token->str_value.length, expressions, param_count, compiler);
 
-                // second pass
             }
         }
+
+        else if (next_tok->type == TOK_POINTER_DEREF) {
+            advance(parser);
+            symbol_node *operand = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);
+            if (!operand)
+            {
+                panic(ERROR_UNDEFINED_VARIABLE, "Variable used before declaration", compiler);
+            }
+            node *operand_node = create_variable_node(operand->var_name, operand->var_name_size, compiler);
+
+            node *deref_node = create_deref_node(operand_node, compiler);
+            while (peek(parser, 0)->type == TOK_POINTER_DEREF) {
+                advance(parser);
+                deref_node = create_deref_node(deref_node, compiler);
+            }
+            return deref_node;
+        }
+
         else
         {
             symbol_node *var = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);
@@ -1009,8 +1204,15 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
         return sub_node;
     }
 
+    case TOK_BIT_AND:
+    {  //for getting the address
+        advance(parser); // consume &
+        node *operand = parse_expression(parser, PREC_UNARY, true, compiler);
+        node *address_node = create_address_node(operand, compiler);
+        return address_node;
+    }
     case TOK_LPAREN:
-    { // Braces must be used in C if you will declare a variable inside the case
+    {
         advance(parser);
         node *expr = parse_expression(parser, PREC_NONE, true, compiler);
         if (peek(parser, 0)->type != TOK_RPAREN)
@@ -1020,6 +1222,7 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
         advance(parser);
         return expr;
     }
+
 
     default:
         panic(ERROR_UNDEFINED, "Unexpected token/s, may still not be emplemented", compiler);

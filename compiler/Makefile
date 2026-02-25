@@ -1,7 +1,8 @@
 # Compiler and Flags
 CC = gcc
 # -I. tells the compiler to look in the current directory for headers
-CFLAGS = -g -O0 -Wall -Wextra -I.
+CFLAGS = -g -O0   -I.
+#-Wall -Wextra
 
 # List all your source files (.c)
 # We include the paths relative to where this Makefile sits
