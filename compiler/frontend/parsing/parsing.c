@@ -74,7 +74,7 @@ data_type* create_data_type_from_token(Data_type type, Compiler *compiler)
 }
 
 data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
-    printf("STARTED PARSING DATA_TYPE RECURSIVE: ");
+   
 
     token *current_token = peek(parser, 0);
     if (!current_token)
@@ -117,8 +117,8 @@ data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
 
 data_type* parse_data_type(Parser *parser, Compiler *compiler)
 {
-    printf("STARTED PARSING DATA_TYPE: ");
-    print_token(peek(parser, 1)->type);
+    
+    
     if (!peek(parser, 0))
     {
         panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
@@ -219,7 +219,7 @@ data_type* parse_param_data_type(Parser *parser, Compiler *compiler, size_t* par
 
 node* parse_statement(Compiler *compiler, Parser *parser)
 {
-    print_token(peek(parser, 0)->type);
+    
     switch (peek(parser, 0)->type)
     {
     case TOK_EXIT:
@@ -327,7 +327,7 @@ node* parse_return_node(Compiler *compiler, Parser *parser)
 
 node *parse_let_node(Compiler *compiler, Parser *parser)
 {
-    printf("STARTED PARSING LET TOKEN\n");
+   
     node *let_node = (node *)arena_alloc(compiler->statements_arena, sizeof(node), compiler);
     if (!let_node)
         panic(ERROR_MEMORY_ALLOCATION, "Exit node allocation failed", compiler);
@@ -346,28 +346,24 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
     //  and this info:   node* create_variable_node_dec(string var_name ✅, size_t length ✅ , variable_storage_type storage_type ✅ , normal_register reg_location ✅ , Data_type data_type)
     let_node->stmnt->stmnt_let.hash = hash_function(peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length);
     advance(parser); // consume identifier
-    print_token(peek(parser, 0)->type);
+    
+    
     data_type *data_type_token = parse_data_type(parser, compiler); // consume data type
-    printf("CODE BLOCK 4\n");
+   
 
     create_variable_node_dec(identifier_token->str_value.starting_value, identifier_token->str_value.length, STORE_IN_STACK, 0, data_type_token, compiler);
-    printf("AFTER PARSING LET STATEMENT THE OFFSET IS: %lu\n",find_variable(compiler, hash_function(let_node->stmnt->stmnt_let.name,  let_node->stmnt->stmnt_let.name_length), let_node->stmnt->stmnt_let.name,  let_node->stmnt->stmnt_let.name_length)->offset);
-
+    
     token *t = advance(parser); // consume equal
 
-    printf("CODE BLOCK 5\n");
     if (t->type != TOK_EQUAL)
     {
         panic(ERROR_SYNTAX, "usage: let var: type = value;", compiler);
     }
 
-    printf("PARSING EXPRESSION\n");
     let_node->stmnt->stmnt_let.value = parse_expression(parser, presedences[TOK_EQUAL], true, compiler)->expr;
-    printf("DONE PARSING EXPRESSION\n");
-
-    printf("CODE BLOCK 6\n");
+  
     advance(parser); // consume ;
-    printf("DONE PARSING LET TOKEN\n\n\n");
+    
     return let_node;
 }
 
@@ -584,7 +580,8 @@ node* skip_function_decleration(Compiler* compiler, Parser* parser) {
     advance(parser); // consume {
     size_t stack = 0;
     while (true) {
-        print_token(peek(parser, 0)->type);
+        
+        
         switch (peek(parser, 0)->type) {
             case TOK_LBRACE:
                 stack++;
@@ -604,7 +601,8 @@ node* skip_function_decleration(Compiler* compiler, Parser* parser) {
         }
         advance(parser);
     }
-    print_token(peek(parser, 0)->type);
+    
+    
     return NULL;
 }
 
@@ -636,7 +634,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     func_stmt->stmnt->stmnt_function_declaration.function_node = arena_alloc(compiler->symbol_arena, sizeof(function_node), compiler);
     
     if (!func_stmt->stmnt->stmnt_function_declaration.function_node) panic(ERROR_MEMORY_ALLOCATION, "function decleration node allocation failed", compiler);
-        
+    
     func_stmt->stmnt->stmnt_function_declaration.function_node->name = name_tok->str_value.starting_value;
     func_stmt->stmnt->stmnt_function_declaration.function_node->name_length = name_tok->str_value.length;
 
@@ -659,7 +657,6 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     {
         // find number of parameters and check syntax
         size_t tmp = 0;
-        printf("STARTED FIRST LOOKUP LOOP\n");
         while (true)
         {
 
@@ -670,7 +667,8 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             if (peek(parser, tmp)->type != TOK_IDENTIFIER)
                 panic(ERROR_SYNTAX, "function parameter name not specified", compiler);
             tmp++;
-            print_token(peek(parser, tmp)->type);
+            
+            
             parse_param_data_type(parser, compiler, &tmp); // check if data type is correct, we will parse it again later, this is just for syntax checking and if incorrect it will throw a panic
             
             param_count++;
@@ -681,7 +679,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
             else
                 panic(ERROR_SYNTAX, "after parameter either ')' or ',' only", compiler);
         }
-        printf("PASSED FIRST LOOKUP LOOP\n");
+       
         // populate function node info
         func_stmt->stmnt->stmnt_function_declaration.function_node->param_count = param_count;
         func_stmt->stmnt->stmnt_function_declaration.function_node->parameters = arena_alloc(compiler->symbol_arena, sizeof(expression) * param_count, compiler);
@@ -772,9 +770,14 @@ node *parse_code_block(Compiler *compiler, Parser *parser, bool function_block, 
 
     block_node->stmnt->stmnt_block.statements = (statement **)arena_alloc(compiler->statements_arena, sizeof(statement *) * stmt_count, compiler);
     size_t statement_count = 0;
-    enter_new_scope(compiler, function_return_type);
+    if (function_block) {
+        enter_new_function_scope(compiler, function_return_type);
+    }
+    else {
+        enter_new_scope(compiler, function_return_type);
+    }
+
     block_node->stmnt->stmnt_block.table = peek_symbol_stack(compiler);
-    if (function_block) block_node->stmnt->stmnt_block.table->parent_scope = compiler->symbol_table_stack->storage[0];
 
 
     // if the thing has a return value
@@ -1091,8 +1094,8 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
 {
     token *current_token = peek(parser, 0);
     if (!current_token)  return NULL;
-    print_token(current_token->type);
-    print_token(peek(parser, 1)->type);
+    
+    
     switch (current_token->type)
     {
     case TOK_NUMBER:
@@ -1121,7 +1124,6 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                 {
                     advance(parser); // consume 'void'
                 }
-                printf("DONE PRE PARSING THE FUNCTION CALL\n");
                 advance(parser); // consume ')'
 
                 return create_func_call_node(current_token->str_value.starting_value, current_token->str_value.length, NULL, 0, compiler);
@@ -1135,10 +1137,8 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                 size_t depth = 0;
                 while (peek(parser, tmp)->type != TOK_RPAREN)
                 {
-                    printf("DEPTH = %lu and CURRENT TOKEN is ", depth);
-                    print_token(peek(parser, tmp)->type);
+                    
                     if ((peek(parser, tmp)->type == TOK_COMMA) && (depth == 0)) {
-                        printf("INCREMENTED PARAM COUNT IN LOOP, CURRENT COUNT: %zu\n", param_count + 1);
                         param_count++;
                         tmp++;
                     }
@@ -1156,7 +1156,6 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                     }
                     tmp++;
                 }
-                printf("INCREMENTED PARAM COUNT, CURRENT COUNT: %zu\n", param_count + 1);
                 param_count++;
 
                 // second pass
@@ -1166,8 +1165,6 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
                     expressions[i] = *(parse_expression(parser, PREC_NONE, false, compiler)->expr);
                     advance(parser); // consume comma and final R_BRACE
                 }
-                printf("DONE PRE PARSING THE FUNCTION CALL\n");
-                printf("Number of parameters: %zu\n", param_count);
                 return create_func_call_node(current_token->str_value.starting_value, current_token->str_value.length, expressions, param_count, compiler);
             }
         }

@@ -2,7 +2,7 @@
 CC = gcc
 # -I. tells the compiler to look in the current directory for headers
 CFLAGS = -g -O0   -I.
-#-Wall -Wextra
+# -Wall -Wextra
 
 # List all your source files (.c)
 # We include the paths relative to where this Makefile sits
@@ -20,7 +20,7 @@ error_handler/error_handler.c
 # Automatically generate a list of object files (.o) from the source files
 OBJS = $(SRCS:.c=.o)
 
-# The name of your final executable
+# The name of final executable
 TARGET = quark
 
 # Default rule: build the compiler

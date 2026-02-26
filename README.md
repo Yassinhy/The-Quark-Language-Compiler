@@ -1,183 +1,219 @@
 # Quark Language Compiler
 
-A custom compiler for the Quark programming language, targeting x86-64 architecture.
+A compiler for the Quark programming language, targeting x86-64 architecture.
 
 ## Prerequisites
 
-Ensure the following tools are installed on your system:
-
-* **GNU Make**: For build automation.
-* **NASM**: Netwide Assembler for generating executable machine code.
-* **ld**: The GNU linker.
+- **GNU Make** for build automation
+- **NASM** (Netwide Assembler) for generating machine code
+- **ld** (GNU linker)
 
 ## Getting Started
 
-### Building the Project
-
-To build the compiler from source:
+### Building
 
 ```bash
 cd compiler
 make
-
 ```
 
 ### Usage
 
-Run the compiler against a Quark source file (`.qk`):
-
 ```bash
-./quark <filename>.qk <architecture> <output assembly and executable file name>
-
+./quark <filename>.qk <architecture> <output_name>
 ```
 
-**System Compatibility**
+This produces `<output_name>.asm` and links it into an executable named `<output_name>`.
 
-| OS | Architecture | Status |
-| --- | --- | --- |
-| Linux | **x86-64** | ✅ Supported |
-| Linux | ARM64 | 🚧 Planned |
+### Architecture Support
+
+| OS    | Architecture | Status    |
+|-------|-------------|-----------|
+| Linux | x86-64      | Supported |
+| Linux | ARM64       | Planned   |
+
+---
 
 ## Language Reference
 
-### Variables
+### Entry Point
 
-Variables are strongly typed and defined using the `let` keyword. Identifiers must follow standard C-style naming conventions (alphanumeric and underscores only, cannot start with a number).
+Every Quark program must define a `main` function. Execution begins at `main`, and its return value is used as the program's exit code.
 
 ```rust
-let my_var: int = 10;
-let _temp: int = 5;
+fn main(void): int {
+    return 0;
+}
+exit main();
 ```
 
-Assignments also follow C-style assignments
+The `exit main();` call at the top level is required — it tells the runtime to invoke `main` and forward its return value to the OS. A program without a `main` function will not compile.
+
+### Data Types
+
+| Type   | Size    |
+|--------|---------|
+| `int`  | 4 bytes |
+| `long` | 8 bytes |
+| `*T`   | 8 bytes (pointer to T) |
+
+### Variables
+
+Variables are strongly typed and declared with the `let` keyword.
+
 ```rust
-let my_var: int = 10;
-my_var = my_var + 3 * 2; // now my_var = 10 + 3 * 2 = 16
+let x: int = 10;
+let y: long = 100;
+```
+
+Reassignment uses standard C-style syntax.
+
+```rust
+x = x + 3 * 2;
+```
+
+### Pointers
+
+Take the address of a variable with `&` and dereference with `.*`.
+
+```rust
+let x: int = 42;
+let p: *int = &x;
+let val: int = p.*;      // val = 42
+
+let pp: **int = &p;
+let val2: int = pp.*.*;  // val2 = 42
 ```
 
 ### Control Flow
 
-Quark supports standard conditional logic and loops.
-
-**If Statements**
+**If / Else**
 
 ```rust
 if (x > 10) {
-    exit 1;
+    return 1;
+} else if (x == 10) {
+    return 2;
+} else {
+    return 3;
 }
+```
 
-// Single line syntax is also supported:
+Single-line form is also valid.
+
+```rust
 if (x == 0) exit 0;
 ```
 
-**While Loops**
+**While**
 
 ```rust
 while (x < 10) {
     x = x + 1;
     if (x == 5) {
-        break; // Exit loop
+        break;
     }
 }
 ```
 
 ### Functions
 
-Functions are declared using the `fn` keyword. You must specify parameter types and the return type.
+Functions are declared with `fn`, require typed parameters, and must declare a return type. A function with no parameters uses `void`.
 
 ```rust
 fn add(a: int, b: int): int {
     return a + b;
 }
-```
 
-Functions may also be recursive
-
-```rust
-fn add(a: int, b: int): int {
-    if ((a + b) < 10) {
-        return a + b;
-    }
-    else {
-        // Example of a recursive call passing two arguments
-        return add(a + 1, b + 1); 
-    }
+fn get_constant(void): int {
+    return 42;
 }
 ```
 
-Functions are called using their name
+Recursive functions are supported.
 
 ```rust
-let x: int = 5;
-let y: int = 2;
-let z: int = add(x, y); // z now = 7
+fn factorial(n: int): int {
+    if (n <= 1) { return 1; }
+    return n * factorial(n - 1);
+}
 ```
 
-### System Operations
+Function calls can be used in expressions.
 
-**Exit**
-Terminate the program with a status code (0-255).
+```rust
+let result: int = add(3, factorial(5));
+```
+
+### Exit
+
+Terminate the program immediately with a status code (0–255).
 
 ```rust
 exit 0;
 ```
 
+---
+
 ## Optimizations
 
-| Optimization |  Status |
-| --- |--- |
-| Path Exahuastion | ✅ Supported |
-| Dead Code Elimination | ✅ Supported |
-| Escape Analysis | ✅ Supported |
-| Tail Call Recursion | 🚧 Planned |
-| Constant Folding | 🚧 Planned |
-| Loop Unfolding | 🚧 Planned |
+| Optimization          | Status    |
+|-----------------------|-----------|
+| Path Exhaustion       | Supported |
+| Dead Code Elimination | Supported |
+| Escape Analysis       | Supported |
+| Constant Folding      | Planned   |
+| Tail Call Recursion   | Planned   |
+| Loop Unrolling        | Planned   |
 
+---
 
+## Compiler Pipeline
 
 ```mermaid
 graph TD
     subgraph Frontend
-    A[Source Code] --> B[Tokenizer]
-    B --> C[Tokens]
+        A[Source Code] --> B[Tokenizer]
+        B --> C[Tokens]
     end
 
     subgraph "Middle-End (Parsing)"
-    C --> D[Parser 1st Pass]
-    D --> E[Function Declarations]
-    C --> F[Parser 2nd Pass]
-    E --> F
-    F --> G[AST]
+        C --> D[Parser 1st Pass]
+        D --> E[Function Declarations]
+        C --> F[Parser 2nd Pass]
+        E --> F
+        F --> G[AST]
     end
 
     subgraph Backend
-    G --> H[Code Generator]
-    H --> I[Assembly]
+        G --> H[Code Generator]
+        H --> I[Assembly]
     end
 ```
 
+---
+
 ## Plans
-### Short-Term (Near Future)
-- [ ] Support for `float` data types
-- [ ] Tail call recursion Optimization
-- [ ] Constant Folding
-- [ ] Arrays
-- [ ] library integration
 
+### Short-Term
+- Arrays
+- Structs
+- Support for `float` data types
+- Constant folding
+- Tail call recursion optimization
+- Library integration
 
-### Long-Term (Future Goals)
-- [ ] **ARM64** Architecture support
-- [ ] Standard Library (File I/O, String manipulation, Math)
-- [ ] Structs
-- [ ] SIMD optimizations
+### Long-Term
+- ARM64 architecture support
+- Standard library (file I/O, string manipulation, math)
+- SIMD optimizations
 
+---
 
-## Architecture decisions
-- Arenas:
-    Used Arenas for O(1) deallocation and the prevention of memory leaks.
+## Architecture Decisions
 
-- Multi-Pass Design:
-    Implemented a multi-pass compiler pipeline (lexing → parsing → semantic analysis → IR → codegen) to keep each phase isolated, testable, and easier to extend with optimizations later.
+**Arenas** — all allocations go through arena allocators, giving O(1) deallocation and eliminating the risk of memory leaks across compilation phases.
 
-- Minimal dependencies:
-    Avoided third-party libraries to keep the compiler portable, auditable, and easy to bootstrap.
+**Multi-pass design** — the pipeline is split into discrete phases (lexing, parsing, semantic analysis, codegen) so each phase is isolated, independently testable, and easier to extend with optimizations later.
+
+**Minimal dependencies** — no third-party libraries. The compiler is self-contained, easy to bootstrap, and has no external build requirements beyond a C compiler, NASM, and ld.

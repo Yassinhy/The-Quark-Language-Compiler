@@ -11,6 +11,7 @@ symbol_node* find_variable(Compiler* compiler, uint32_t hash, char* var_name, ui
 
 void enter_new_scope(Compiler* compiler, data_type* scope_data_type);
 void exit_current_scope(Compiler* compiler);
+void enter_new_function_scope(Compiler* compiler, data_type* return_data_type);
 
 size_t get_data_type_size(data_type* type, Compiler* compiler);
 void append_function_to_func_map(function_node* function_node_input, size_t hash, Compiler* compiler);

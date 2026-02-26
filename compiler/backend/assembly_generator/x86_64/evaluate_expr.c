@@ -59,7 +59,7 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
     }
     
     Conversion_type conversion = find_conversion_type(wanted_output_result, var_node->data_type);
-    printf(" STACK OFFSET FOR VARIABLE IS: %lu\n", var_node->offset);
+
     switch (var_node->where_it_is_stored) {
         case STORE_IN_STACK:
             if (conversion == CONVERT_ZERO_EXTEND) {
@@ -178,7 +178,7 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
 {
     size_t num_len;
     char buffer[BUFFER_SIZE];
-    printf("EXPRESSION TYPE: %i\n", expr->type);
+    
     int len;
     switch (expr->type)
     {
@@ -252,7 +252,7 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         }
         write_to_buffer("; Starting to evaluate\n", 23, output, compiler);
         load_variable_from_storage(var_node, wanted_output_result, compiler, output, buffer);
-        printf("PROBLEM HERE 2\n");
+      
         return;
     }
 
@@ -320,9 +320,16 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         }
         write_to_buffer("call ", 5, output, compiler);
         write_to_buffer(expr->func_call.name, expr->func_call.name_length, output, compiler);
-        write_to_buffer("_quark\n", 7, output, compiler);
+
+        if (strncmp(expr->func_call.name, "main", expr->func_call.name_length) == 0) {
+            write_to_buffer("\n", 1, output, compiler);
+        }
+        else {
+            write_to_buffer("_quark\n", 7, output, compiler);
+        }
+
         write_to_buffer("pop rdi\npop rsi\npop rdx\npop rcx\npop r8\npop r9\n", 46, output, compiler);
-        printf("PROBLEM HERE\n");
+       
         free(long_data_type);
         break;
     }

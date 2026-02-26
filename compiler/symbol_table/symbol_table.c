@@ -30,6 +30,31 @@ symbol_table* peek_symbol_stack(Compiler* compiler) {
     }
     return current_table;
 }
+
+void enter_new_function_scope(Compiler* compiler, data_type* return_data_type) {
+    if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
+    if (compiler->symbol_table_stack->current_size + 1 >= compiler->symbol_table_stack->capacity) {
+        compiler->symbol_table_stack->storage = realloc(compiler->symbol_table_stack->storage, compiler->symbol_table_stack->capacity * 2 * sizeof(symbol_table*));
+        compiler->symbol_table_stack->capacity *= 2;
+    }
+    if (!compiler->symbol_table_stack->storage) panic(ERROR_MEMORY_ALLOCATION, "Entered too many scopes for your memory", compiler);
+    symbol_table* new_table = arena_alloc(compiler->symbol_arena, sizeof(symbol_table), compiler);
+    if (!new_table) panic(ERROR_MEMORY_ALLOCATION, "New symbol table allocation failed", compiler);
+    
+    new_table->parent_scope = NULL;
+    new_table->scope_data_type = return_data_type;
+    new_table->scope_offset = 0;
+
+    new_table->symbol_map = arena_alloc(compiler->symbol_arena, 16 * sizeof(symbol_node*), compiler);
+    if (!new_table->symbol_map) panic(ERROR_MEMORY_ALLOCATION, "new scope unable to be declared, not enough memory", compiler);
+    memset(new_table->symbol_map, 0, 16 * sizeof(symbol_node*));
+    
+    compiler->symbol_table_stack->storage[compiler->symbol_table_stack->current_size] = new_table;
+    compiler->symbol_table_stack->current_size++;
+    compiler->current_function_symbol_table = new_table;
+}
+
+
 void enter_new_scope(Compiler* compiler, data_type* scope_data_type) {
     if (!compiler) panic(ERROR_UNDEFINED, "Compiler not initialized", compiler);
     if (compiler->symbol_table_stack->current_size + 1 >= compiler->symbol_table_stack->capacity) {
@@ -42,7 +67,7 @@ void enter_new_scope(Compiler* compiler, data_type* scope_data_type) {
     
     new_table->parent_scope = peek_symbol_stack(compiler);
     new_table->scope_data_type = scope_data_type;
-    new_table->scope_offset = 0;
+    new_table->scope_offset = compiler->current_function_symbol_table->scope_offset;
 
     new_table->symbol_map = arena_alloc(compiler->symbol_arena, 16 * sizeof(symbol_node*), compiler);
     if (!new_table->symbol_map) panic(ERROR_MEMORY_ALLOCATION, "new scope unable to be declared, not enough memory", compiler);
@@ -58,7 +83,7 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
     size_t hash = hash_function(variable->variable.name, variable->variable.length);
     if (peek_symbol_stack(compiler)->parent_scope == NULL)
     {
-        new_symbol = &peek_symbol_stack(compiler)->symbol_map[hash % BUCKETS_GLOBAL_SYMBOLTABLE];
+        new_symbol = &peek_symbol_stack(compiler)->symbol_map[hash % BUCKETS_IN_EACH_SYMBOL_MAP];
     }
     else
     {
@@ -83,6 +108,9 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
     {
     case STORE_IN_STACK:
         peek_symbol_stack(compiler)->scope_offset += get_data_type_size(variable->variable.data_type, compiler);
+        if (peek_symbol_stack(compiler)->scope_offset > compiler->current_function_symbol_table->scope_offset) {
+            compiler->current_function_symbol_table->scope_offset = peek_symbol_stack(compiler)->scope_offset;
+        }
         (*new_symbol)->offset = peek_symbol_stack(compiler)->scope_offset;
         break;
     case STORE_IN_REGISTER:
@@ -113,7 +141,7 @@ symbol_node* find_variable(Compiler* compiler, uint32_t hash, char* var_name, ui
         symbol_node* searcher;
         if (current_table->parent_scope == NULL)
         {
-            searcher = current_table->symbol_map[hash % BUCKETS_GLOBAL_SYMBOLTABLE];
+            searcher = current_table->symbol_map[hash % BUCKETS_IN_EACH_SYMBOL_MAP];
         }
         else{
             searcher = current_table->symbol_map[hash % BUCKETS_IN_EACH_SYMBOL_MAP];

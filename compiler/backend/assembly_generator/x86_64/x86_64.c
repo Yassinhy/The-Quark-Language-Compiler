@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 // #include "frontend/expression_creation/expressions.h"
 
 
@@ -94,9 +95,13 @@ static void generate_block_code (statement* stmt, FILE* output, Compiler* compil
 static inline void generate_function_code(statement* stmt, FILE* output, Compiler* compiler) {
     function_node* func_node = stmt->stmnt_function_declaration.function_node;
     write_to_buffer(func_node->name, func_node->name_length, output, compiler);
-    write_to_buffer("_quark", 6, output, compiler);
-    printf("Generating code for function: %.*s\n", (int)func_node->name_length, func_node->name);
-    write_to_buffer(":\n", 2, output, compiler);
+    
+    if ((strncmp(func_node->name, "main", func_node->name_length) == 0)) {
+        write_to_buffer(":\n", 2, output, compiler);
+    } else {
+        write_to_buffer("_quark", 6, output, compiler);
+        write_to_buffer(":\n", 2, output, compiler);
+    }
     write_to_buffer("push rbp\nmov rbp, rsp\n", 22, output, compiler);
 
     enter_existing_scope(func_node->code_block->stmnt_block.table, true, compiler);
@@ -121,7 +126,7 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
     case STMT_EXIT:
         {
             // always int
-            printf("CHECHPOINT 7\n");
+          
             
             evaluate_expression_x86_64(stmt->stmnt_exit.exit_code, compiler, output, 0, stmt->stmnt_exit.exit_code->result_type);
             int len = snprintf(buffer, sizeof(buffer), "\nmov rdi, rax\nmov rax, 60\nsyscall\n");
@@ -142,7 +147,7 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
             if (!var) {
                 panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
             }
-            printf("EXPRECTED OFFSET IS:              %lu\n\n", var->offset);
+          
             evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
             int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type->general_data_type));
             write_to_buffer(buffer, len, output, compiler);
@@ -280,25 +285,21 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
 }
  
 void generate_assembly_x86_64(const AST* AST, Compiler* compiler, FILE* output, char* output_name) {
-    printf("Generating assembly for output name: %s\n", output_name);
     char output_filename[512];
     snprintf(output_filename, sizeof(output_filename), "%s.asm", output_name);
-    output = fopen(output_filename, "wb"); //clear file if it exists, create if it doesn't
-    printf("CHECHPOINT 1\n");
-    size_t i = 0;
+    output = fopen(output_filename, "wb");
+    if (!output) panic(ERROR_INTERNAL, "Failed to open output file", compiler);
+
     write_to_buffer("section .text\n\tglobal _start\n_start:\n", 37, output, compiler);
-    printf("CHECHPOINT 2\n");
-    write_to_buffer("push rbp\nmov rbp, rsp\nsub rsp, ", 31, output, compiler);
-    printf("CHECHPOINT 3\n");
-    size_t glbl_scope_offset = compiler->symbol_table_stack->storage[0]->scope_offset;
-    printf("CHECHPOINT 4\n");
-    nums_to_str(((glbl_scope_offset + 7) & ~7), output, compiler);
-    printf("CHECHPOINT 5\n");
-    write_to_buffer("\n", 1, output, compiler);
-    printf("CHECHPOINT 6\n");
+    write_to_buffer("push rbp\nmov rbp, rsp\nsub rsp, 0\n", 33, output, compiler);
+    write_to_buffer("push r9\npush r8\npush rcx\npush rdx\npush rsi\npush rdi\n", 52, output, compiler);
+    write_to_buffer("call main\n", 10, output, compiler);
+    write_to_buffer("pop rdi\npop rsi\npop rdx\npop rcx\npop r8\npop r9\n", 46, output, compiler);
+    write_to_buffer("mov rdi, rax\nmov rax, 60\nsyscall\n\n", 34, output, compiler);
+    size_t i = 0;
     while (i < AST->node_count)
     {
-        printf("i enumeration: %lu\n", i);
+      
         switch (AST->nodes[i]->type)    
         {
         case NODE_STATEMENT:
