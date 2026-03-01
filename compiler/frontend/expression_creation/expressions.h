@@ -13,6 +13,7 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
 node* create_variable_node(char* var_name, size_t length, Compiler* compiler);
 node* create_address_node(node* operand, Compiler* compiler);
 node* create_deref_node(node* operand, Compiler* compiler);
+node* create_array_index_node(expression* array, expression* index, Compiler* compiler);
 
 void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* output);
 

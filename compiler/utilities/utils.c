@@ -22,6 +22,7 @@ const int Data_type_sizes_from_data_types[] = {
     [DATA_TYPE_VOID] = 0,
     [DATA_TYPE_UNDEFINED] = 0,
     [DATA_TYPE_POINTER] = 8,
+    [DATA_TYPE_ARRAY] = 8,
 };
 
 const int Data_is_signed[] = {

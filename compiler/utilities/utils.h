@@ -166,7 +166,7 @@ typedef struct data_type
         {
             size_t array_length;
             TokenType array_base_type;
-            struct data_type* nested_array; // NULL if non-recursive or base array
+            struct data_type* array_of; // NULL if non-recursive or base array
         } array_type;
 
         struct pointer_type
@@ -192,7 +192,8 @@ typedef struct token
             char *starting_value;
             size_t length;
         } str_value;
-        int int_value;
+        long long int_value;
+        long double float_value;
     };
 } token;
 
@@ -217,6 +218,8 @@ typedef enum
     EXPR_FUNCTION_CALL,
     EXPR_ADDRESS,
     EXPR_POINTER_DEREF,
+    EXPR_INIT_LIST,
+    EXPR_ARR_INDEX
 } ExpressionType;
 
 typedef enum
@@ -331,6 +334,19 @@ typedef struct expression
         {
             struct expression* operand;
         } dereference;
+
+        // {1, 2, 4}
+        struct {
+            struct expression* elements;
+            size_t count;
+        } init_list;
+
+        // arr[expr]
+        struct
+        {
+            struct expression* array;  // could be another array_index, or a variable
+            struct expression* index;
+        } array_index;
     };
 
 } expression;
@@ -475,7 +491,7 @@ typedef struct statement
 typedef enum
 {
     NODE_STATEMENT,
-    NODE_EXPRESSION
+    NODE_EXPRESSION,
 } NodeType;
 
 // Node storage

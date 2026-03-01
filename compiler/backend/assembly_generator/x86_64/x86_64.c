@@ -83,6 +83,23 @@ void enter_existing_scope(symbol_table* new_table, bool independent, Compiler* c
     compiler->symbol_table_stack->current_size++;
 }
 
+void generate_array_initialization_code(Compiler* compiler, data_type* data_type, size_t base_rbp_offset, FILE* output, expression* expression) {
+    if (expression->type == EXPR_INIT_LIST) {
+        size_t element_size = get_data_type_size(data_type->array_type.array_of, compiler);
+        
+        for (size_t i = 0; i < expression->init_list.count; i++ ) {
+            generate_array_initialization_code(compiler, data_type->array_type.array_of, base_rbp_offset - element_size * i, output, &(expression->init_list.elements[i]));
+        }
+    }
+    else
+    {
+        const char* reg = get_reg_x86(0, data_type->general_data_type);
+        evaluate_expression_x86_64(expression, compiler, output, 0, data_type);
+        int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", base_rbp_offset, reg);
+        write_to_buffer(buffer, len, output, compiler);
+    }
+}
+
 static void generate_block_code (statement* stmt, FILE* output, Compiler* compiler) {
     enter_existing_scope(stmt->stmnt_block.table, false, compiler);
     for (size_t i = 0; i < stmt->stmnt_block.statement_count; i++)
@@ -147,10 +164,15 @@ static void generate_statement_code(statement* stmt, FILE* output, Compiler* com
             if (!var) {
                 panic(ERROR_UNDEFINED_VARIABLE, "Variable not found", compiler);
             }
-          
-            evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
-            int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type->general_data_type));
-            write_to_buffer(buffer, len, output, compiler);
+            if (var->data_type->data_type_family == FAMILY_ARRAY) {
+                generate_array_initialization_code(compiler, var->data_type, var->offset, output, stmt->stmnt_let.value);
+            }
+            else 
+            {
+                evaluate_expression_x86_64(stmt->stmnt_let.value, compiler, output, 0, var->data_type);
+                int len = snprintf(buffer, sizeof(buffer), "mov [rbp - %lu], %s\n", var->offset, get_reg_x86(0,  stmt->stmnt_let.value->result_type->general_data_type));
+                write_to_buffer(buffer, len, output, compiler);
+            }
             break;
         }
 

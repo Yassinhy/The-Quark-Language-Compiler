@@ -99,6 +99,13 @@ data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
         result->general_data_type = DATA_TYPE_LONG;
         advance(parser); // consume the data type token
         break;
+
+    case TOK_FLOAT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_FLOAT;
+        result->general_data_type = DATA_TYPE_FLOAT;
+        advance(parser); // consume the data type token
+        break;
     
     case TOK_MUL: // for pointer ( *int)
         advance(parser); // consume *
@@ -107,6 +114,28 @@ data_type* parse_data_type_recursive(Parser *parser, Compiler *compiler) {
         result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
         result->general_data_type = DATA_TYPE_POINTER;
         result->pointer_type.base_type = parse_data_type_recursive(parser, compiler);
+        break;
+
+    case TOK_LBRACKET: // for arrays
+        advance(parser); // consume [
+        if (peek(parser, 0)->type != TOK_RBRACKET && peek(parser, 0)->type != TOK_NUMBER) {
+            panic(ERROR_SYNTAX, "Expected ']' or a number after '[' in array type declaration", compiler);
+        }
+        if (peek(parser, 0)->type == TOK_NUMBER) {
+            result->array_type.array_length = peek(parser, 0)->int_value;
+            advance(parser); // consume the number
+            if (peek(parser, 0)->type != TOK_RBRACKET) {
+                panic(ERROR_SYNTAX, "Expected ']' after array length in array type declaration", compiler);
+            }
+            advance(parser); // consume ]
+        }
+        else {
+            result->array_type.array_length = 0; // for unsized arrays
+            advance(parser);
+        }
+        result->data_type_family = FAMILY_ARRAY;
+        result->general_data_type = DATA_TYPE_ARRAY;
+        result->array_type.array_of = parse_data_type_recursive(parser, compiler);
         break;
         
     default:
@@ -150,7 +179,14 @@ data_type* parse_data_type(Parser *parser, Compiler *compiler)
         result->general_data_type = DATA_TYPE_LONG;
         advance(parser); // consume the data type token
         break;
-    
+
+    case TOK_FLOAT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_FLOAT;
+        result->general_data_type = DATA_TYPE_FLOAT;
+        advance(parser); // consume the data type token
+        break;
+
     case TOK_MUL: // for pointer ( *int)
         advance(parser); // consume *
         result->data_type_family = FAMILY_POINTER;
@@ -159,6 +195,100 @@ data_type* parse_data_type(Parser *parser, Compiler *compiler)
         result->general_data_type = DATA_TYPE_POINTER;
         result->pointer_type.base_type = parse_data_type_recursive(parser, compiler);
         break;
+    case TOK_LBRACKET: // for arrays
+        advance(parser); // consume [
+        if (peek(parser, 0)->type != TOK_RBRACKET && peek(parser, 0)->type != TOK_NUMBER) {
+            panic(ERROR_SYNTAX, "Expected ']' or a number after '[' in array type declaration", compiler);
+        }
+        if (peek(parser, 0)->type == TOK_NUMBER) {
+            result->array_type.array_length = peek(parser, 0)->int_value;
+            advance(parser); // consume the number
+            if (peek(parser, 0)->type != TOK_RBRACKET) {
+                panic(ERROR_SYNTAX, "Expected ']' after array length in array type declaration", compiler);
+            }
+            advance(parser); // consume ]
+        }
+        else {
+            result->array_type.array_length = 0; // for unsized arrays
+            advance(parser);
+        }
+        result->data_type_family = FAMILY_ARRAY;
+        result->general_data_type = DATA_TYPE_ARRAY;
+        result->array_type.array_of = parse_data_type_recursive(parser, compiler);
+        break;
+
+    default:
+        panic(ERROR_SYNTAX, "Expected a data type", compiler);
+    }
+    return result;
+}
+
+
+
+data_type* parse_param_data_type_recursive(Parser *parser, Compiler *compiler, size_t* param_offset)
+{
+   token *current_token = peek(parser, *param_offset);
+    if (!current_token)
+    {
+        panic(ERROR_SYNTAX, "Unexpected end of input while parsing data type", compiler);
+    }
+
+    data_type* result = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+    
+    switch (current_token->type)
+    {
+    case TOK_INT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_INT;
+        result->general_data_type = DATA_TYPE_INT;
+        (*param_offset)++; // consume the data type token
+        break;
+    
+    case TOK_LONG:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_LONG;
+        result->general_data_type = DATA_TYPE_LONG;
+        (*param_offset)++; // consume the data type token
+        break;
+
+    case TOK_FLOAT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_FLOAT;
+        result->general_data_type = DATA_TYPE_FLOAT;
+        (*param_offset)++; // consume the data type token
+        break;
+    
+    case TOK_MUL: // for pointer ( *int)
+        (*param_offset)++; // consume *
+        result->data_type_family = FAMILY_POINTER;
+        result->pointer_type.base_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
+        result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
+        result->general_data_type = DATA_TYPE_POINTER;
+        result->pointer_type.base_type = parse_param_data_type_recursive(parser, compiler, param_offset);
+        break;
+    
+    case TOK_LBRACKET: // for arrays
+        (*param_offset)++; // consume [
+        if (peek(parser, *param_offset)->type != TOK_RBRACKET && peek(parser, *param_offset)->type != TOK_NUMBER) {
+            panic(ERROR_SYNTAX, "Expected ']' or a number after '[' in array type declaration", compiler);
+        }
+        if (peek(parser, *param_offset)->type == TOK_NUMBER) {
+            result->array_type.array_length = peek(parser, *param_offset)->int_value;
+            (*param_offset)++; // consume the number
+            if (peek(parser, *param_offset)->type != TOK_RBRACKET) {
+                panic(ERROR_SYNTAX, "Expected ']' after array length in array type declaration", compiler);
+            }
+            (*param_offset)++; // consume ]
+        }
+        else {
+            result->array_type.array_length = 0; // for unsized arrays
+            (*param_offset)++;
+        }
+        result->data_type_family = FAMILY_ARRAY;
+        result->general_data_type = DATA_TYPE_ARRAY;
+        result->array_type.array_of = parse_param_data_type_recursive(parser, compiler, param_offset);
+        break;
+    
         
     default:
         panic(ERROR_SYNTAX, "Expected a data type", compiler);
@@ -207,7 +337,36 @@ data_type* parse_param_data_type(Parser *parser, Compiler *compiler, size_t* par
         result->pointer_type.base_type = arena_alloc(compiler->expressions_arena, sizeof(data_type), compiler);
         result->pointer_type.base_type->data_type_family = FAMILY_FLAT;
         result->general_data_type = DATA_TYPE_POINTER;
-        result->pointer_type.base_type = parse_param_data_type(parser, compiler, param_offset);
+        result->pointer_type.base_type = parse_param_data_type_recursive(parser, compiler, param_offset);
+        break;
+
+    case TOK_FLOAT:
+        result->data_type_family = FAMILY_FLAT;
+        result->flat_type.flat_data_type = TOK_FLOAT;
+        result->general_data_type = DATA_TYPE_FLOAT;
+        (*param_offset)++; // consume the data type token
+        break;
+
+    case TOK_LBRACKET: // for arrays
+        (*param_offset)++; // consume [
+        if (peek(parser, *param_offset)->type != TOK_RBRACKET && peek(parser, *param_offset)->type != TOK_NUMBER) {
+            panic(ERROR_SYNTAX, "Expected ']' or a number after '[' in array type declaration", compiler);
+        }
+        if (peek(parser, *param_offset)->type == TOK_NUMBER) {
+            result->array_type.array_length = peek(parser, *param_offset)->int_value;
+            (*param_offset)++; // consume the number
+            if (peek(parser, *param_offset)->type != TOK_RBRACKET) {
+                panic(ERROR_SYNTAX, "Expected ']' after array length in array type declaration", compiler);
+            }
+            (*param_offset)++; // consume ]
+        }
+        else {
+            result->array_type.array_length = 0; // for unsized arrays
+            (*param_offset)++;
+        }
+        result->data_type_family = FAMILY_ARRAY;
+        result->general_data_type = DATA_TYPE_ARRAY;
+        result->array_type.array_of = parse_param_data_type_recursive(parser, compiler, param_offset);
         break;
         
     default:
@@ -342,8 +501,7 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
 
     let_node->stmnt->stmnt_let.name = identifier_token->str_value.starting_value;
     let_node->stmnt->stmnt_let.name_length = identifier_token->str_value.length;
-    // we need this info: add_var_to_current_scope(expression* variable, variable_storage_type storage_type, normal_register reg_location)
-    //  and this info:   node* create_variable_node_dec(string var_name ✅, size_t length ✅ , variable_storage_type storage_type ✅ , normal_register reg_location ✅ , Data_type data_type)
+    
     let_node->stmnt->stmnt_let.hash = hash_function(peek(parser, 0)->str_value.starting_value, peek(parser, 0)->str_value.length);
     advance(parser); // consume identifier
     
@@ -362,8 +520,7 @@ node *parse_let_node(Compiler *compiler, Parser *parser)
 
     let_node->stmnt->stmnt_let.value = parse_expression(parser, presedences[TOK_EQUAL], true, compiler)->expr;
   
-    advance(parser); // consume ;
-    
+    advance(parser); // consume ; 
     return let_node;
 }
 
@@ -572,35 +729,13 @@ node *parse_else_node(Compiler *compiler, Parser *parser, size_t* has_return)
 
 node* skip_function_decleration(Compiler* compiler, Parser* parser) {
     advance(parser); // consume fn
-    advance(parser); // consume function name
+    token* token_name = advance(parser); // consume function name
     advance(parser); // consume (
     while (peek(parser, 0)->type != TOK_RPAREN) advance(parser); // consume parameters and return type
     advance(parser); // consume )
+    function_node* found_func = find_function_symbol_node(token_name->str_value.starting_value, token_name->str_value.length, hash_function(token_name->str_value.starting_value, token_name->str_value.length), compiler);
     parse_data_type(parser, compiler); // consume :datatype
-    advance(parser); // consume {
-    size_t stack = 0;
-    while (true) {
-        
-        
-        switch (peek(parser, 0)->type) {
-            case TOK_LBRACE:
-                stack++;
-                break;
-            case TOK_RBRACE:
-                if (stack == 0) {
-                    advance(parser); // consume }
-                    return NULL;
-                }
-                stack--;
-                break;
-            case TOK_EOF:
-                panic(ERROR_SYNTAX, "Curly Brace NOT closed  at function decleration", compiler);
-            default:
-                break;
-        
-        }
-        advance(parser);
-    }
+    found_func->code_block = parse_code_block(compiler, parser, true, found_func->parameters, found_func->param_count, found_func->return_type)->stmnt;
     
     
     return NULL;
@@ -706,7 +841,7 @@ node* parse_function_node(Compiler* compiler, Parser* parser)
     
     append_function_to_func_map(func_stmt->stmnt->stmnt_function_declaration.function_node, func_stmt->stmnt->stmnt_function_declaration.index, compiler);
     
-    func_stmt->stmnt->stmnt_function_declaration.function_node->code_block = parse_code_block(compiler, parser, true, func_stmt->stmnt->stmnt_function_declaration.function_node->parameters, func_stmt->stmnt->stmnt_function_declaration.function_node->param_count, func_stmt->stmnt->stmnt_function_declaration.function_node->return_type)->stmnt;
+    func_stmt->stmnt->stmnt_function_declaration.function_node->code_block = NULL;
     func_stmt->stmnt->stmnt_function_declaration.function_node->next = NULL;
     
     return func_stmt;
@@ -1170,19 +1305,42 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
         }
         else if (next_tok->type == TOK_POINTER_DEREF) {
             advance(parser);
-            symbol_node *operand = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);
+            symbol_node* operand = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);
             if (!operand)
             {
                 panic(ERROR_UNDEFINED_VARIABLE, "Variable used before declaration", compiler);
             }
-            node *operand_node = create_variable_node(operand->var_name, operand->var_name_size, compiler);
+            node* operand_node = create_variable_node(operand->var_name, operand->var_name_size, compiler);
 
-            node *deref_node = create_deref_node(operand_node, compiler);
+            node* deref_node = create_deref_node(operand_node, compiler);
             while (peek(parser, 0)->type == TOK_POINTER_DEREF) {
                 advance(parser);
                 deref_node = create_deref_node(deref_node, compiler);
             }
             return deref_node;
+        }
+
+        else if (next_tok->type == TOK_LBRACKET) {
+            advance(parser);
+            symbol_node* array = find_variable(compiler, hash_function(current_token->str_value.starting_value, current_token->str_value.length), current_token->str_value.starting_value, current_token->str_value.length);
+            if (array->data_type->data_type_family != FAMILY_ARRAY && array->data_type->data_type_family != FAMILY_POINTER) {
+                panic(ERROR_TYPE_MISMATCH, "Cannot index into a non array", compiler);
+            }
+            
+            node* index = parse_expression(parser, PREC_NONE, 1, compiler);
+            if (peek(parser, 0)->type != TOK_RBRACKET) panic(ERROR_SYNTAX, "Expected ']' after array indexing", compiler);
+            advance(parser);
+            node* array_node = create_variable_node(array->var_name, array->var_name_size, compiler);
+            node* array_index_node = create_array_index_node(array_node->expr, index->expr, compiler);
+
+            while (peek(parser, 0)->type == TOK_LBRACKET) {
+                advance(parser);
+                index = parse_expression(parser, PREC_NONE, 1, compiler);
+                if (peek(parser, 0)->type != TOK_RBRACKET) panic(ERROR_SYNTAX, "Expected ']' after array indexing", compiler);
+                advance(parser);
+                array_index_node = create_array_index_node(array_index_node->expr, index->expr, compiler);
+            }
+            return array_index_node;
         }
 
         else
@@ -1227,6 +1385,50 @@ node *parse_prefix(Parser *parser, bool constant_foldable, Compiler *compiler)
         return expr;
     }
 
+    case TOK_LBRACE:
+    {
+        advance(parser); // consume {
+
+        // first pass to count the number of expressions
+        size_t number_of_expressions = 0;
+        size_t tmp_offset = 0; // start after the {
+        while (peek(parser, tmp_offset)) {
+            if (peek(parser, tmp_offset)->type == TOK_RBRACE) {number_of_expressions++; break;}
+            else if (peek(parser, tmp_offset)->type == TOK_COMMA) {number_of_expressions++; tmp_offset++;}
+            else if (peek(parser, tmp_offset)->type == TOK_LBRACE) 
+            {
+                size_t depth = 1;
+                tmp_offset++;
+                while (depth > 0) {
+                    if (peek(parser, tmp_offset)->type == TOK_LBRACE) depth++;
+                    else if (peek(parser, tmp_offset)->type == TOK_RBRACE) depth--;
+                    tmp_offset++;
+                }
+            }
+            else {
+                tmp_offset++;
+            }
+        }
+
+        // second pass to parse the expressions and create the initializer list node
+        expression *exprs = arena_alloc(compiler->expressions_arena, sizeof(expression) * (number_of_expressions), compiler);
+        for (size_t i = 0; i < number_of_expressions; i++) {
+            exprs[i] = *(parse_expression(parser, PREC_NONE, false, compiler)->expr);
+            if (peek(parser, 0)->type == TOK_COMMA) advance(parser); // consume comma
+        }
+        advance(parser); // consume }
+
+        // make the node itself and return it
+        node* initializer_list_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
+        if (!initializer_list_node) panic(ERROR_MEMORY_ALLOCATION, "Initializer list node allocation failed", compiler);
+        initializer_list_node->type = NODE_EXPRESSION;
+        initializer_list_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
+        initializer_list_node->expr->type = EXPR_INIT_LIST;
+        initializer_list_node->expr->result_type = NULL;
+        initializer_list_node->expr->init_list.count = number_of_expressions;
+        initializer_list_node->expr->init_list.elements = exprs;
+        return initializer_list_node;
+    }
 
     default:
         panic(ERROR_UNDEFINED, "Unexpected token/s, may still not be emplemented", compiler);

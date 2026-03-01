@@ -25,7 +25,7 @@ const uint8_t CHAR_TYPE[256] = {
     ['('] = 8, [')'] = 9, [';'] = 10, [':'] = 12, [','] = 13, 
     ['{'] = 14, ['}'] = 15, ['#'] = 16,
     ['<'] = 17, ['>'] = 18, ['!'] = 19, ['%'] = 20,
-    ['&'] = 21, ['.'] = 22,
+    ['&'] = 21, ['.'] = 22, ['['] = 23, [']'] = 24
 };
 
 static inline int identify_token(const char* value, size_t length, token* the_token, size_t* function_count){
@@ -126,16 +126,31 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
         size_t token_start = i;
         switch (CHAR_TYPE[(unsigned char)source[i]])
         {
-        case 11:{
-            int value = source[i] - '0';
+        case 11: {
+            int int_part = source[i] - '0';
             i++;
-            while (i < *file_length && (source[i] >= '0' && source[i] <= '9')) {
-                value = value * 10 + (source[i] - '0');
+            while (i < *file_length && source[i] >= '0' && source[i] <= '9') {
+                int_part = int_part * 10 + (source[i] - '0');
                 i++;
             }
+
+            if (i < *file_length && source[i] == '.') {
+                i++; // consume '.'
+                double value = (double)int_part;
+                double factor = 0.1;
+                while (i < *file_length && source[i] >= '0' && source[i] <= '9') {
+                    value += (source[i] - '0') * factor;
+                    factor *= 0.1;
+                    i++;
+                }
+                tokens[*token_count].type = TOK_FLOAT;
+                tokens[*token_count].float_value = value;
+            } else {
+                tokens[*token_count].type = TOK_NUMBER;
+                tokens[*token_count].int_value = int_part;
+            }
+
             tokens[*token_count].line = line_number;
-            tokens[*token_count].int_value = value;
-            tokens[*token_count].type = TOK_NUMBER;
             (*token_count)++;
             break;
         }
@@ -361,6 +376,23 @@ void tokenize(const char* source, Compiler* compiler, size_t* token_count, size_
             }
             break;
         }
+
+        case 23:{
+            tokens[*token_count].line = line_number;
+            tokens[*token_count].type = TOK_LBRACKET;           // [
+            (*token_count)++;
+            i++;
+            break;
+        }
+        case 24:{
+            tokens[*token_count].line = line_number;
+            tokens[*token_count].type = TOK_RBRACKET;           // ]
+            (*token_count)++;
+            i++;
+            break;
+        }
+
+        
 
         default: {
             printf("Error: Unrecognized character '%c' (ASCII %d) at line %zu, position %zu\n", 

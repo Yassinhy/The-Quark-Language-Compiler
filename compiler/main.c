@@ -105,6 +105,7 @@ int main(int argc, char** argv) {
 
     char command[512];
     // build the command string
+    // nasm -f elf64 output.asm && ld output.o -o output
     snprintf(command, sizeof(command),  "nasm -f elf64 %s.asm && ld %s.o -o %s", argv[3], argv[3], argv[3]);
 
     double time_spent = ((double)(end - start)) / CLOCKS_PER_SEC;

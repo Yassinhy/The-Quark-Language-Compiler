@@ -1098,6 +1098,90 @@ run_test "12.10" "Triple pointer chain" \
 " \
 42
 
+run_test "13.1" "Basic array indexing" \
+"fn main(void): int {
+    let arr :[4]int = {10, 20, 30, 40};
+    return arr[2];
+}" \
+30
+
+run_test "13.2" "Array index with variable" \
+"fn main(void): int {
+    let arr :[4]int = {10, 20, 30, 40};
+    let i :int = 3;
+    return arr[i];
+}" \
+40
+
+run_test "13.3" "Array in arithmetic" \
+"fn main(void): int {
+    let arr :[3]int = {1, 2, 3};
+    return arr[0] + arr[1] + arr[2];
+}" \
+6
+
+run_test "13.4" "Array index with expression" \
+"fn main(void): int {
+    let arr :[4]int = {10, 20, 30, 40};
+    let i :int = 1;
+    return arr[i + 1];
+}" \
+30
+
+run_test "13.5" "Array passed to function" \
+"fn sum_first_two(arr: *int): int {
+    return arr[0] + arr[1];
+}
+fn main(void): int {
+    let arr :[3]int = {5, 7, 3};
+    return sum_first_two(arr);
+}" \
+12
+
+run_test "13.6" "2D array basic indexing" \
+"fn main(void): int {
+    let arr :[2][2]int = {{1, 2}, {3, 4}};
+    return arr[1][0];
+}" \
+3
+
+run_test "13.7" "2D array all elements sum" \
+"fn main(void): int {
+    let arr :[2][2]int = {{1, 2}, {3, 4}};
+    return arr[0][0] + arr[0][1] + arr[1][0] + arr[1][1];
+}" \
+10
+
+run_test "13.8" "2D array with variable index" \
+"fn main(void): int {
+    let arr :[3][3]int = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+    let i :int = 2;
+    let j :int = 2;
+    return arr[i][j];
+}" \
+9
+
+run_test "13.9" "Array in while loop" \
+"fn main(void): int {
+    let arr :[5]int = {1, 2, 3, 4, 5};
+    let sum :int = 0;
+    let i :int = 0;
+    while (i < 5) {
+        sum = sum + arr[i];
+        i = i + 1;
+    }
+    return sum;
+}" \
+15
+
+run_test "13.10" "3D array indexing" \
+"fn main(void): int {
+    let arr :[2][2][2]int = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};
+    return arr[1][1][1];
+}" \
+8
+
+
 # ============================================
 # Summary
 # ============================================

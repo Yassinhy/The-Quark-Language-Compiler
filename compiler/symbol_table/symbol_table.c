@@ -9,7 +9,11 @@ size_t get_data_type_size(data_type* type, Compiler* compiler) {
         case FAMILY_FLAT:
             return Data_type_sizes_from_data_types[type->general_data_type];
         case FAMILY_POINTER:
-            return 8; // A pointer is 8 bytes on a 64-bit system
+            return 8; // A pointer is 8 bytes
+        case FAMILY_ARRAY:
+            return type->array_type.array_length * get_data_type_size(type->array_type.array_of, compiler);
+        case FAMILY_ADDRESS:
+            return 8; // An address is also 8 bytes
         default:
             panic(ERROR_INTERNAL, "Unkown DATA TYPE, trying to get its size", compiler);
     }
@@ -107,12 +111,24 @@ symbol_node* add_var_to_current_scope(Compiler* compiler, expression* variable, 
     switch (storage_type)
     {
     case STORE_IN_STACK:
-        peek_symbol_stack(compiler)->scope_offset += get_data_type_size(variable->variable.data_type, compiler);
-        if (peek_symbol_stack(compiler)->scope_offset > compiler->current_function_symbol_table->scope_offset) {
-            compiler->current_function_symbol_table->scope_offset = peek_symbol_stack(compiler)->scope_offset;
+        if (variable->variable.data_type->data_type_family == FAMILY_ARRAY) {
+            size_t len = variable->variable.data_type->array_type.array_length;
+            size_t element_size = get_data_type_size(variable->variable.data_type->array_type.array_of, compiler);
+            peek_symbol_stack(compiler)->scope_offset += (len * element_size);
+            if (peek_symbol_stack(compiler)->scope_offset > compiler->current_function_symbol_table->scope_offset) {
+                compiler->current_function_symbol_table->scope_offset = peek_symbol_stack(compiler)->scope_offset;
+            }
+            (*new_symbol)->offset = peek_symbol_stack(compiler)->scope_offset;
+            break;
         }
-        (*new_symbol)->offset = peek_symbol_stack(compiler)->scope_offset;
-        break;
+        else {
+            peek_symbol_stack(compiler)->scope_offset += get_data_type_size(variable->variable.data_type, compiler);
+            if (peek_symbol_stack(compiler)->scope_offset > compiler->current_function_symbol_table->scope_offset) {
+                compiler->current_function_symbol_table->scope_offset = peek_symbol_stack(compiler)->scope_offset;
+            }
+            (*new_symbol)->offset = peek_symbol_stack(compiler)->scope_offset;
+            break;
+        }
     case STORE_IN_REGISTER:
         (*new_symbol)->register_location = reg_location;
         break;

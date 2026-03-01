@@ -146,54 +146,60 @@ node* create_bin_node(node* left, TokenType op, Parser* parser, bool constant_fo
         panic(ERROR_MEMORY_ALLOCATION, "Binary expression result_type allocation failed", compiler);
     }
     
-    if (left->expr->result_type->data_type_family == FAMILY_FLAT && right_node->expr->result_type->data_type_family == FAMILY_FLAT){
-        if (left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE) {
-            if ((left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || left->expr->result_type->general_data_type == DATA_TYPE_FLOAT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT))
-            {
-                bin_node->expr->result_type->general_data_type = DATA_TYPE_DOUBLE;
-                bin_node->expr->result_type->flat_type.flat_data_type = TOK_DOUBLE;
+    if (right_node->expr->type == EXPR_INIT_LIST || left->expr->type == EXPR_INIT_LIST ) {
+        panic(ERROR_ARGUMENT_COUNT, "Initializer list cannot be evaluated", compiler);
+    
+    }
+    if (left->expr->result_type && right_node->expr->result_type) {
+        if (left->expr->result_type->data_type_family == FAMILY_FLAT && right_node->expr->result_type->data_type_family == FAMILY_FLAT){
+            if (left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE) {
+                if ((left->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || left->expr->result_type->general_data_type == DATA_TYPE_FLOAT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_DOUBLE || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT))
+                {
+                    bin_node->expr->result_type->general_data_type = DATA_TYPE_DOUBLE;
+                    bin_node->expr->result_type->flat_type.flat_data_type = TOK_DOUBLE;
+                }
+                else
+                {
+                    panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is double and the other is not", compiler);
+                }
             }
-            else
-            {
-                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is double and the other is not", compiler);
+            else if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT) {
+                if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT && right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT)
+                {
+                    bin_node->expr->result_type->general_data_type = DATA_TYPE_FLOAT;
+                    bin_node->expr->result_type->flat_type.flat_data_type = TOK_FLOAT;
+                }
+                else
+                {
+                    panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is float and the other is not", compiler);
+                }
+                
             }
-        }
-        else if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT || right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT) {
-            if (left->expr->result_type->general_data_type == DATA_TYPE_FLOAT && right_node->expr->result_type->general_data_type == DATA_TYPE_FLOAT)
-            {
-                bin_node->expr->result_type->general_data_type = DATA_TYPE_FLOAT;
-                bin_node->expr->result_type->flat_type.flat_data_type = TOK_FLOAT;
+            else if (left->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_LONG) {
+                if ((left->expr->result_type->general_data_type == DATA_TYPE_LONG || left->expr->result_type->general_data_type == DATA_TYPE_INT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_INT))
+                {
+                    bin_node->expr->result_type->general_data_type = DATA_TYPE_LONG;
+                    bin_node->expr->result_type->flat_type.flat_data_type = TOK_LONG;
+                }
+                else
+                {
+                    panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
+                }
             }
-            else
-            {
-                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression, one is float and the other is not", compiler);
+            else if (left->expr->result_type->general_data_type == DATA_TYPE_INT || right_node->expr->result_type->general_data_type == DATA_TYPE_INT) {
+                if (left->expr->result_type->general_data_type == DATA_TYPE_INT && right_node->expr->result_type->general_data_type == DATA_TYPE_INT)
+                {
+                    bin_node->expr->result_type->general_data_type = DATA_TYPE_INT;
+                    bin_node->expr->result_type->flat_type.flat_data_type = TOK_INT;
+                }
+                else
+                {
+                    panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
+                }
             }
-            
-        }
-        else if (left->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_LONG) {
-            if ((left->expr->result_type->general_data_type == DATA_TYPE_LONG || left->expr->result_type->general_data_type == DATA_TYPE_INT) && (right_node->expr->result_type->general_data_type == DATA_TYPE_LONG || right_node->expr->result_type->general_data_type == DATA_TYPE_INT))
-            {
-                bin_node->expr->result_type->general_data_type = DATA_TYPE_LONG;
-                bin_node->expr->result_type->flat_type.flat_data_type = TOK_LONG;
+            else {
+                panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
             }
-            else
-            {
-                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
-            }
-        }
-        else if (left->expr->result_type->general_data_type == DATA_TYPE_INT || right_node->expr->result_type->general_data_type == DATA_TYPE_INT) {
-            if (left->expr->result_type->general_data_type == DATA_TYPE_INT && right_node->expr->result_type->general_data_type == DATA_TYPE_INT)
-            {
-                bin_node->expr->result_type->general_data_type = DATA_TYPE_INT;
-                bin_node->expr->result_type->flat_type.flat_data_type = TOK_INT;
-            }
-            else
-            {
-                panic(ERROR_TYPE_MISMATCH, "Type mismatch in binary expression", compiler);
-            }
-        }
-        else {
-            panic(ERROR_TYPE_MISMATCH, "Illegal types in binary expression", compiler);
         }
     }
     bin_node->expr->type = EXPR_BINARY;
@@ -269,7 +275,13 @@ node* create_func_call_node(char* func_name, size_t name_length, expression* arg
 
     for (size_t i = 0; i < param_count; i++)
     {
-        if(arguments[i].result_type->general_data_type != func_dec_node->parameters[i].variable.data_type->general_data_type) panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
+                if((arguments[i].result_type->general_data_type != func_dec_node->parameters[i].variable.data_type->general_data_type)) {
+                if ((arguments[i].result_type->general_data_type == DATA_TYPE_POINTER && func_dec_node->parameters[i].variable.data_type->general_data_type != DATA_TYPE_ARRAY) || (arguments[i].result_type->general_data_type != DATA_TYPE_POINTER && func_dec_node->parameters[i].variable.data_type->general_data_type == DATA_TYPE_ARRAY)) {
+                    printf("%i vs %i\n", arguments[i].result_type->general_data_type, func_dec_node->parameters[i].variable.data_type->general_data_type);
+                    panic(ERROR_TYPE_MISMATCH, "Function argument type mismatch", compiler);
+                }
+            }
+        
     }
     
 
@@ -330,4 +342,41 @@ node* create_variable_node(char* var_name, size_t length, Compiler* compiler)
     return var_node;
 }
 
+node* create_array_index_node(expression* array, expression* index, Compiler* compiler) {
+    node* array_index_node = arena_alloc(compiler->expressions_arena, sizeof(node), compiler);
+    if(!array_index_node) return NULL;
+    array_index_node->type = NODE_EXPRESSION;
+    array_index_node->expr = arena_alloc(compiler->expressions_arena, sizeof(expression), compiler);
+    if(!array_index_node->expr) return NULL;
+    array_index_node->expr->type = EXPR_ARR_INDEX;
+    array_index_node->expr->array_index.index = index;
+
+    
+
+    if (array->type == EXPR_IDENTIFIER)
+    {
+
+        if (!array->result_type || (array->result_type->data_type_family != FAMILY_ARRAY && array->result_type->data_type_family != FAMILY_POINTER)) {
+        panic(ERROR_RUNTIME, "Trying to index to a non-array expression", compiler);
+        }
+
+        array_index_node->expr->array_index.array = array;
+        if (array->result_type->data_type_family == FAMILY_POINTER) {
+            array_index_node->expr->result_type = array->result_type->pointer_type.base_type;
+        } else {
+            array_index_node->expr->result_type = array->result_type->array_type.array_of;
+        }
+    }
+    else if (array->type == EXPR_ARR_INDEX)
+    {
+        array_index_node->expr->array_index.array = array;
+        array_index_node->expr->result_type = array->result_type->array_type.array_of;
+    }
+    else {
+        panic(ERROR_TYPE_MISMATCH, "Cannot index into a non-array expression",compiler);
+        exit(1);
+    }
+
+    return array_index_node;
+}
 

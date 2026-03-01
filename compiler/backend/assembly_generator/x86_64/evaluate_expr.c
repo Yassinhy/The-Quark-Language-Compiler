@@ -1,6 +1,7 @@
 #include "backend/assembly_generator/x86_64/evaluate_expr.h"
 #include "backend/assembly_generator/x86_64/x86_64.h"
 // #include "frontend/expression_creation/expressions.h"
+#include "symbol_table/symbol_table.h"
 #include "utilities/utils.h"
 #include "error_handler/error_handler.h"
 #include <stddef.h>
@@ -9,8 +10,8 @@
 
 #define BUFFER_SIZE 256
 
-const char* regs32[] = {"eax", "ebx", "ecx", "edx", "esi", "edi", "r8d", "r9d"};
-const char* regs64[] = {"rax", "rbx", "rcx", "rdx","rsi", "rdi", "r8 ", "r9 "};
+const char* regs32[] = {"eax", "ebx", "ecx", "edx", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d"};
+const char* regs64[] = {"rax", "rbx", "rcx", "rdx","rsi", "rdi", "r8 ", "r9 ", "r10", "r11", "r12", "r13", "r14", "r15"};
 
 const char* get_reg( int reg_index, data_type* type) {
     if (Data_type_sizes_from_data_types[type->general_data_type] == 4) {
@@ -44,26 +45,50 @@ Conversion_type find_conversion_type(data_type* to, data_type* from){
 }
 
 
-#define REG_RAX 0
+typedef enum
+{
+    REG_RAX = 0,
+    REG_RBX = 1,
+    REG_R10 = 8,
+    REG_R11 = 9,
+    REG_R12 = 10,
 
-static void load_variable_from_storage( symbol_node* var_node, data_type* wanted_output_result, Compiler* compiler, FILE* output, char* buffer)
+} Reg_type;
+
+static void load_address_from_storage( symbol_node* var_node, Compiler* compiler, FILE* output, char* buffer, int reg_index)
+{
+    switch (var_node->where_it_is_stored) {
+        case STORE_IN_STACK: {
+            int len = snprintf(buffer, BUFFER_SIZE, "lea %s, [rbp - ",  regs64[reg_index]);
+            write_to_buffer(buffer, len, output, compiler);
+            nums_to_str(var_node->offset, output, compiler);
+            write_to_buffer("]\n", 2, output, compiler);
+            break;
+        }
+
+        case STORE_AS_PARAM: {
+            int len2 = snprintf(buffer, BUFFER_SIZE, "lea %s, [rbp + ",  regs64[reg_index]);
+            write_to_buffer(buffer, len2, output, compiler);
+            nums_to_str(var_node->param_offset, output, compiler);
+            write_to_buffer("]\n", 2, output, compiler);
+            break;
+        }
+
+        default:
+            panic(ERROR_INTERNAL, "Trying to get address of a variable that is not stored in memory", compiler);
+    }
+}
+
+
+static void load_variable_from_storage( symbol_node* var_node, data_type* wanted_output_result, Compiler* compiler, FILE* output, char* buffer, int reg_index)
 {
 
-    
-    // CURRENTLY ARRAYS ARE NOT IMPLEMENTED, I THINK THE LOGIC WOULD BE TO STORE AN ARRAY INTO A POINTER THEN PASS IT but I'll prolly figure out eventually
-    if (var_node->data_type->data_type_family == FAMILY_ARRAY) {
-        panic(ERROR_TYPE_MISMATCH, "Cannot assign array currently, feature not implemented", compiler);
-    }
-    if (wanted_output_result->data_type_family == FAMILY_ARRAY) {
-        panic(ERROR_TYPE_MISMATCH, "Cannot take array currently, feature not implemented", compiler);
-    }
-    
     Conversion_type conversion = find_conversion_type(wanted_output_result, var_node->data_type);
-
+    printf("WANTED OUTPUT RESULT IS: %i\n", wanted_output_result->general_data_type);
     switch (var_node->where_it_is_stored) {
         case STORE_IN_STACK:
             if (conversion == CONVERT_ZERO_EXTEND) {
-                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s[rbp - ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s[rbp - ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
@@ -71,13 +96,13 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
 
             else if (conversion == CONVERT_SIGN_EXTEND) {
                 if (Data_type_sizes_from_data_types[var_node->data_type->general_data_type] < 4){
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s[rbp - ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s[rbp - ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                     write_to_buffer(buffer, len, output, compiler);
                     nums_to_str(var_node->offset, output, compiler);
                     write_to_buffer("]\n", 2, output, compiler);
                 }
                 else {
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s[rbp - ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s[rbp - ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                     write_to_buffer(buffer, len, output, compiler);
                     nums_to_str(var_node->offset, output, compiler);
                     write_to_buffer("]\n", 2, output, compiler);
@@ -86,14 +111,23 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
             
             else if (conversion == CONVERT_TRUNCATE) {
                 warning("Truncation of the expression has happened", compiler);
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp - ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp - ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
             }
 
             else {
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp - ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len;
+                if (var_node->data_type->data_type_family == FAMILY_ARRAY) {
+                    // array decay: caller wants the address, not a value
+                    len = snprintf(buffer, BUFFER_SIZE, "lea %s, [rbp - ", regs64[reg_index]);
+                }
+                else {
+                    len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp - ",
+                        get_reg(reg_index, wanted_output_result),
+                        size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                }
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
@@ -102,7 +136,7 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
             
         case STORE_AS_PARAM:
             if (conversion == CONVERT_ZERO_EXTEND) {
-                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s[rbp + ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s[rbp + ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->param_offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
@@ -110,13 +144,13 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
 
             else if (conversion == CONVERT_SIGN_EXTEND) {
                 if (Data_type_sizes_from_data_types[wanted_output_result->general_data_type] < 4){
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s[rbp + ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s[rbp + ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                     write_to_buffer(buffer, len, output, compiler);
                     nums_to_str(var_node->param_offset, output, compiler);
                     write_to_buffer("]\n", 2, output, compiler);
                 }
                 else {
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s[rbp + ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s[rbp + ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                     write_to_buffer(buffer, len, output, compiler);
                     nums_to_str(var_node->param_offset, output, compiler);
                     write_to_buffer("]\n", 2, output, compiler);
@@ -125,14 +159,14 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
             
             else if (conversion == CONVERT_TRUNCATE) {
                 warning("Truncation of the expression has happened", compiler);
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp + ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp + ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->param_offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
             }
 
             else {
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp + ",  get_reg(REG_RAX, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
+                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s[rbp + ",  get_reg(reg_index, wanted_output_result), size_prefix[Data_type_sizes_from_data_types[wanted_output_result->general_data_type]]);
                 write_to_buffer(buffer, len, output, compiler);
                 nums_to_str(var_node->param_offset, output, compiler);
                 write_to_buffer("]\n", 2, output, compiler);
@@ -141,29 +175,29 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
             
         case STORE_IN_REGISTER:
             if (conversion == CONVERT_ZERO_EXTEND) {
-                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s\n",  get_reg(REG_RAX, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
+                int len = snprintf(buffer, BUFFER_SIZE, "movzx %s, %s\n",  get_reg(reg_index, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
                 write_to_buffer(buffer, len, output, compiler);
             }
 
             else if (conversion == CONVERT_SIGN_EXTEND) {
                 if (Data_type_sizes_from_data_types[var_node->data_type->general_data_type] < 4){
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s\n",  get_reg(REG_RAX, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsx %s, %s\n",  get_reg(reg_index, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
                     write_to_buffer(buffer, len, output, compiler);
                 }
                 else {
-                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s\n",  get_reg(REG_RAX, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
+                    int len = snprintf(buffer, BUFFER_SIZE, "movsxd %s, %s\n",  get_reg(reg_index, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
                     write_to_buffer(buffer, len, output, compiler);
                 }
             }
             
             else if (conversion == CONVERT_TRUNCATE) {
                 warning("Truncation of the expression has happened", compiler);
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n",  get_reg(REG_RAX, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
+                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n",  get_reg(reg_index, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
                 write_to_buffer(buffer, len, output, compiler);
             }
 
             else {
-                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n",  get_reg(REG_RAX, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
+                int len = snprintf(buffer, BUFFER_SIZE, "mov %s, %s\n",  get_reg(reg_index, wanted_output_result), get_reg(2 + var_node->register_location, wanted_output_result));
                 write_to_buffer(buffer, len, output, compiler);
             }
             break;
@@ -173,6 +207,35 @@ static void load_variable_from_storage( symbol_node* var_node, data_type* wanted
     }
 }
 
+const bool is_signed_type[] = {
+    [DATA_TYPE_CHAR] = true,
+    [DATA_TYPE_INT] = true,
+    [DATA_TYPE_LONG] = true,
+    [DATA_TYPE_POINTER] = false,
+    [DATA_TYPE_ARRAY] = false,
+     // add other types as needed
+};
+
+const char* get_load_instruction(data_type* type, Compiler* compiler) {
+    size_t size = get_data_type_size(type, compiler);
+    bool is_signed = is_signed_type[type->general_data_type];
+    switch (size) {
+        case 1: 
+            if (is_signed) {
+                return "movsx al,";
+            } else {
+                return "movzx al,";
+            }
+        case 2: 
+            if (is_signed) {
+                return "movsx ax,";
+            } else {
+                return "movzx ax,";
+            }
+        case 4: return "mov eax,";
+        case 8: return "mov rax,";
+    }
+}
 
 void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* output, int conditional, data_type* wanted_output_result)
 {
@@ -251,7 +314,7 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
             exit(1);
         }
         write_to_buffer("; Starting to evaluate\n", 23, output, compiler);
-        load_variable_from_storage(var_node, wanted_output_result, compiler, output, buffer);
+        load_variable_from_storage(var_node, wanted_output_result, compiler, output, buffer, REG_RAX);
       
         return;
     }
@@ -334,15 +397,63 @@ void evaluate_expression_x86_64(expression* expr, Compiler* compiler, FILE* outp
         break;
     }
 
+    case EXPR_ARR_INDEX:
+    {
+        if (expr->array_index.array->type == EXPR_IDENTIFIER) {
+            symbol_node* var_node = expr->array_index.array->variable.node_in_table;
+            int element_size = get_data_type_size(expr->result_type, compiler);
+
+             if (var_node->data_type->data_type_family == FAMILY_ARRAY) {
+                load_address_from_storage(var_node, compiler, output, buffer, REG_R10);
+            } else {
+                load_variable_from_storage(var_node, var_node->data_type, compiler, output, buffer, REG_R10);
+            }
+
+            len = snprintf(buffer, BUFFER_SIZE, "push r10\n"); // save base
+            write_to_buffer(buffer, len, output, compiler);
+
+            evaluate_expression_x86_64(expr->array_index.index, compiler, output, false, expr->array_index.index->result_type);       // index → rax, may trash r10
+            len = snprintf(buffer, BUFFER_SIZE, "pop r10\n");  // restore base
+            write_to_buffer(buffer, len, output, compiler);
+            len = snprintf(buffer, BUFFER_SIZE, "imul rax, %d\n", element_size);
+            write_to_buffer(buffer, len, output, compiler);
+            len = snprintf(buffer, BUFFER_SIZE, "add rax, r10\n");
+            write_to_buffer(buffer, len, output, compiler);
+        }
+
+
+        else {
+            // now the base node is at rax
+            evaluate_expression_x86_64(expr->array_index.array, compiler, output, false, expr->array_index.array->result_type);
+            int element_size = get_data_type_size(expr->result_type, compiler);
+            len = snprintf(buffer, BUFFER_SIZE, "push rax\n"); // save base
+            write_to_buffer(buffer, len, output, compiler);
+            evaluate_expression_x86_64(expr->array_index.index, compiler, output, false, expr->array_index.index->result_type);
+            len = snprintf(buffer, BUFFER_SIZE, "pop r10\n");  // restore base
+            write_to_buffer(buffer, len, output, compiler);
+            len = snprintf(buffer, BUFFER_SIZE, "imul rax, %d\n", element_size);
+            write_to_buffer(buffer, len, output, compiler);
+            len = snprintf(buffer, BUFFER_SIZE, "add rax, r10\n");
+            write_to_buffer(buffer, len, output, compiler);
+        }
+        if (expr->result_type->data_type_family != FAMILY_ARRAY) {
+            len = snprintf(buffer, BUFFER_SIZE, "%s %s[rax]\n", get_load_instruction(expr->result_type, compiler), size_prefix[Data_type_sizes_from_data_types[expr->result_type->general_data_type]]);
+            write_to_buffer(buffer, len, output, compiler);
+        }
+        break;
+    }
+
+    case EXPR_INIT_LIST:
+        panic(ERROR_ARGUMENT_COUNT, "Initializer list cannot be evaluated", compiler);
     default:
-        panic(ERROR_UNDEFINED, "Unexpected token, may still not be emplemented", compiler);
+        panic(ERROR_UNDEFINED, "Unexpected expression, may still not be emplemented", compiler);
     }
 }
 
 
 int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int conditional, data_type* wanted_output_result)
 {
-    char buffer[128];
+    char buffer[BUFFER_SIZE];
     evaluate_expression_x86_64(binary_exp->binary.right, compiler, output, false, wanted_output_result); //right value
 
     int len0 = snprintf(buffer, BUFFER_SIZE, "push rax\n");
@@ -515,7 +626,7 @@ int evaluate_bin(expression* binary_exp, Compiler* compiler, FILE* output, int c
 
 int evaluate_unary(expression* unary_exp, Compiler* compiler, FILE* output, data_type* wanted_output_result)
 {
-    char buffer[128];
+    char buffer[BUFFER_SIZE];
     switch (unary_exp->unary.op)
     {
     case TOK_SUB:
